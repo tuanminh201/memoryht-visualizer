@@ -1,0 +1,4258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MemoryHoeffdingTree Visualizer</title>
+<style>
+  :root {
+    --bg: #0f1115;
+    --panel: #171a21;
+    --panel2: #1e222b;
+    --text: #f1f3f5;
+    --muted: #9aa4b2;
+    --border: #2a303b;
+    --accent: #7aa2f7;
+    --leaf: #56cfe1;
+    --split: #7aa2f7;
+    --memory: #c099ff;
+    --edge: #596273;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  .app { padding: 18px; max-width: 1600px; margin: 0 auto; }
+  .header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 20px; margin-bottom: 14px;
+  }
+  .title { font-size: 22px; font-weight: 750; }
+  .meta { display: flex; gap: 10px; flex-wrap: wrap; }
+  .badge {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 10px; font-size: 13px;
+  }
+
+  .event-stage {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 14px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--panel);
+    min-height: 56px;
+  }
+
+  .event-stage.hidden {
+    display: none;
+  }
+
+  .stage-side {
+    min-width: 0;
+  }
+
+  .stage-side.right {
+    text-align: right;
+  }
+
+  .stage-caption {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 3px;
+  }
+
+  .stage-value {
+    font-size: 13px;
+    font-weight: 720;
+  }
+
+  .stage-event {
+    min-width: 190px;
+    text-align: center;
+    padding: 7px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel2);
+  }
+
+  .stage-event.store {
+    border-color: var(--memory);
+  }
+
+  .stage-event.reactivate {
+    border-color: #56cfe1;
+  }
+
+  .stage-event.prune {
+    border-color: #e6c07b;
+  }
+
+  .stage-event-type {
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  .stage-event-meta {
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+
+  .stage-arrow {
+    color: var(--muted);
+    font-size: 18px;
+    text-align: center;
+  }
+
+  .snapshot-badge {
+    border-color: #4a5870;
+  }
+
+  .grid {
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 14px; min-height: 650px;
+  }
+  .panel {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+  }
+  .panel-title {
+    padding: 11px 14px; border-bottom: 1px solid var(--border);
+    font-size: 13px; font-weight: 700; color: var(--muted);
+    letter-spacing: .06em; text-transform: uppercase;
+  }
+
+  .tree-toolbar {
+    display:flex; gap:8px; align-items:center; padding:8px 10px;
+    border-bottom:1px solid var(--border); background:var(--panel);
+  }
+  .tree-toolbar button {
+    padding:6px 10px; font-size:12px;
+  }
+  .tree-hint {
+    margin-left:auto; color:var(--muted); font-size:11px;
+  }
+  #treeViewport {
+    width:100%; height:610px; overflow:hidden; position:relative;
+    cursor:grab; background:var(--panel);
+  }
+  #treeViewport.dragging { cursor:grabbing; }
+  #treeCanvas {
+    width: 100%;
+    height: 100%;
+  }
+  #treeSvg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  #treeWrap { height: 610px; overflow: auto; }
+  #treeSvg { width: 100%; min-width: 850px; height: 600px; display:block; }
+  /* Memory stays inside a fixed panel instead of making the whole page grow. */
+  .memory-panel {
+    height: 681px;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .memory-panel .panel-title {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .memory-count {
+    min-width: 24px;
+    padding: 2px 8px;
+    border: 1px solid rgba(192,153,255,.35);
+    border-radius: 999px;
+    background: rgba(192,153,255,.10);
+    color: #d5bcff;
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1.5;
+    text-align: center;
+    letter-spacing: 0;
+  }
+
+  .memory-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .memory-list::-webkit-scrollbar { width: 9px; }
+  .memory-list::-webkit-scrollbar-track { background: transparent; }
+  .memory-list::-webkit-scrollbar-thumb {
+    background: #343b48;
+    border: 2px solid var(--panel);
+    border-radius: 999px;
+  }
+  .memory-list::-webkit-scrollbar-thumb:hover { background: #465064; }
+
+  .memory-card {
+    flex: 0 0 auto;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--memory);
+    border-radius: 10px;
+    padding: 10px;
+  }
+
+  .memory-card .name {
+    font-weight: 750;
+    margin-bottom: 5px;
+    font-size: 12px;
+  }
+
+  .memory-tree-wrap {
+    margin: 6px 0 8px;
+    background: #12151b;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .memory-tree-svg {
+    width: 100%;
+    height: 125px;
+    display: block;
+  }
+  .memory-tree-label {
+    fill: var(--text);
+    font-size: 10px;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    pointer-events: none;
+  }
+  .memory-tree-sub {
+    fill: var(--muted);
+    font-size: 8px;
+    text-anchor: middle;
+    pointer-events: none;
+  }
+  .memory-edge {
+    stroke: #596273;
+    stroke-width: 1.2;
+    fill: none;
+  }
+  .memory-split-node {
+    fill: #332947;
+    stroke: var(--memory);
+    stroke-width: 1.4;
+  }
+  .memory-leaf-node {
+    fill: #203934;
+    stroke: var(--leaf);
+    stroke-width: 1.3;
+  }
+  .kv {
+    display:grid;
+    grid-template-columns: 1fr auto;
+    gap: 4px 10px;
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  .kv span:nth-child(odd) { color: var(--muted); }
+  .empty { color: var(--muted); padding: 20px 12px; text-align:center; }
+  .controls {
+    margin-top: 14px; padding: 14px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+  }
+  .buttons { display:flex; gap:8px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+  button, select {
+    background: var(--panel2); color: var(--text); border:1px solid var(--border);
+    border-radius:8px; padding:8px 12px; cursor:pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  input[type=range] { width:100%; }
+  .slider-labels {
+    display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-top:4px;
+  }
+  .event {
+    margin-left:auto; color:var(--muted); font-size:12px;
+  }
+  .node-label { fill: var(--text); font-size: 11px; text-anchor: middle; dominant-baseline: middle; pointer-events:none; }
+  .node-sub { fill: var(--muted); font-size: 9px; text-anchor: middle; pointer-events:none; }
+  .edge { stroke: var(--edge); stroke-width: 1.5; fill:none; }
+  .split-node { fill: #28344d; stroke: var(--split); stroke-width:1.5; }
+  .leaf-node { fill: #203934; stroke: var(--leaf); stroke-width:1.5; }
+
+  .event-before-node rect,
+  .event-before-node circle {
+    stroke: #f4d06f !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 8px rgba(244,208,111,.60));
+  }
+
+  .event-after-node rect,
+  .event-after-node circle {
+    stroke: #56cfe1 !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 8px rgba(120,219,169,.62));
+  }
+
+  .memory-card.event-after-memory {
+    border-color: #56cfe1;
+    box-shadow: 0 0 0 2px rgba(120,219,169,.16),
+                0 0 24px rgba(120,219,169,.12);
+  }
+
+  .active-event-node rect,
+  .active-event-node circle {
+    stroke: #f4d06f !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 8px rgba(244,208,111,.6));
+  }
+  .reactivate-target rect,
+  .reactivate-target circle {
+    stroke: #56cfe1 !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 8px rgba(120,219,169,.65));
+  }
+  .memory-card.event-source {
+    border-color: #56cfe1;
+    box-shadow: 0 0 0 2px rgba(120,219,169,.16), 0 0 26px rgba(120,219,169,.12);
+  }
+  .memory-card.event-target {
+    border-color: var(--memory);
+    box-shadow: 0 0 0 2px rgba(192,153,255,.16), 0 0 26px rgba(192,153,255,.12);
+  }
+
+  .floating-subtree {
+    position: fixed;
+    z-index: 60;
+    width: 180px;
+    height: 130px;
+    border-radius: 12px;
+    border: 1px solid var(--memory);
+    background: rgba(18,21,27,.97);
+    box-shadow: 0 12px 32px rgba(0,0,0,.45);
+    overflow: hidden;
+    pointer-events: none;
+    opacity: .98;
+    transition:
+      transform .82s cubic-bezier(.2,.8,.2,1),
+      opacity .82s ease;
+  }
+  .floating-subtree.reactivate {
+    border-color: #56cfe1;
+  }
+  .floating-subtree svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .timeline-wrap {
+    position: relative;
+    padding-top: 13px;
+  }
+  .event-markers {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    height: 18px;
+    pointer-events: none;
+    z-index: 4;
+  }
+  .event-marker {
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    margin-left: -7px;
+    border-radius: 50%;
+    border: 2px solid var(--bg);
+    background: #e6c07b;
+    cursor: pointer;
+    pointer-events: auto;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.18);
+  }
+  .event-marker.store { background: var(--memory); }
+  .event-marker.reactivate { background: #56cfe1; }
+  .event-legend {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 4px;
+  }
+
+
+  .action-overlay {
+    position: fixed;
+    z-index: 55;
+    width: 190px;
+    height: 135px;
+    border-radius: 12px;
+    border: 2px solid var(--memory);
+    background: rgba(18,21,27,.97);
+    box-shadow: 0 14px 36px rgba(0,0,0,.48);
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .action-overlay.reactivate {
+    border-color: #56cfe1;
+  }
+
+  .action-overlay.prune {
+    border-color: #e6c07b;
+  }
+
+  .action-overlay svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .frame-kind-badge {
+    border-color: #596273;
+  }
+
+  .frame-kind-badge.event-before {
+    border-color: #e6c07b;
+  }
+
+  .frame-kind-badge.event-action {
+    border-color: #c099ff;
+  }
+
+  .frame-kind-badge.event-after {
+    border-color: #56cfe1;
+  }
+
+  .event-stage .stage-event {
+    min-width: 230px;
+  }
+
+
+  .analytics-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(320px, .8fr);
+    gap: 14px;
+    margin-top: 14px;
+  }
+
+  .analytics-body {
+    padding: 12px 14px 14px;
+  }
+
+  #accuracyChart {
+    width: 100%;
+    height: 220px;
+    display: block;
+    background: #12151b;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+  }
+
+  .chart-label {
+    fill: var(--muted);
+    font-size: 10px;
+  }
+
+  .chart-line-total {
+    fill: none;
+    stroke: #7aa2f7;
+    stroke-width: 2;
+  }
+
+  .chart-line-window {
+    fill: none;
+    stroke: #56cfe1;
+    stroke-width: 2;
+  }
+
+  .chart-grid {
+    stroke: #2a303b;
+    stroke-width: 1;
+  }
+
+  .chart-event {
+    stroke: #c099ff;
+    stroke-width: 1;
+    stroke-dasharray: 4 4;
+    opacity: .75;
+  }
+
+  .chart-reactivation {
+    stroke: #56cfe1;
+    stroke-width: 2;
+    stroke-dasharray: 5 4;
+  }
+
+  .chart-cursor {
+    stroke: #f1f3f5;
+    stroke-width: 1.5;
+    opacity: .8;
+  }
+
+  .chart-legend {
+    display: flex;
+    gap: 15px;
+    margin-top: 8px;
+    color: var(--muted);
+    font-size: 11px;
+    flex-wrap: wrap;
+  }
+
+  .line-sample {
+    display: inline-block;
+    width: 18px;
+    height: 2px;
+    vertical-align: middle;
+    margin-right: 5px;
+  }
+
+  .diagnostic-card {
+    background: #12151b;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+  }
+
+  .diag-title {
+    font-weight: 780;
+    margin-bottom: 10px;
+  }
+
+  .diag-empty {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .diag-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 7px 14px;
+    font-size: 12px;
+  }
+
+  .diag-grid span:nth-child(odd) {
+    color: var(--muted);
+  }
+
+  .status-yes {
+    color: #56cfe1;
+  }
+
+  .status-no {
+    color: #e6c07b;
+  }
+
+  @media (max-width: 1050px) {
+    .analytics-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .tooltip {
+    position:fixed; display:none; z-index:20; pointer-events:none;
+    background:#0b0d11; border:1px solid var(--border); border-radius:8px;
+    padding:8px 10px; font-size:12px; max-width:280px; box-shadow:0 8px 24px rgba(0,0,0,.35);
+  }
+  @media (max-width: 950px) {
+    .grid { grid-template-columns:1fr; }
+    .memory-panel { height: min(540px, 65vh); }
+  }
+
+  .experiment-picker {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 9px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .experiment-picker label {
+    font-weight: 700;
+    letter-spacing: .03em;
+  }
+
+  .experiment-picker select {
+    min-width: 260px;
+    max-width: 420px;
+  }
+
+  .experiment-picker-status {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .loading-screen {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 30px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+
+  .loading-card {
+    width: min(620px, 100%);
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel);
+    box-shadow: 0 18px 50px rgba(0,0,0,.28);
+  }
+
+  .loading-card h2 {
+    margin: 0 0 8px;
+    font-size: 20px;
+  }
+
+  .loading-card p {
+    margin: 7px 0 0;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+
+  /* =========================================================
+     Thesis-demo polish layer
+     Keeps the existing visualization logic intact.
+     ========================================================= */
+  :root {
+    --bg-soft: #12151b;
+    --panel-hover: #202631;
+    --accent-soft: rgba(122,162,247,.12);
+    --memory-soft: rgba(192,153,255,.12);
+    --success: #56cfe1;
+    --warning: #f0c674;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(circle at 12% -10%, rgba(122,162,247,.10), transparent 26rem),
+      radial-gradient(circle at 92% 0%, rgba(192,153,255,.07), transparent 24rem),
+      var(--bg);
+  }
+
+  .app {
+    max-width: 1780px;
+    padding: 22px 26px 30px;
+  }
+
+  .header {
+    display: block;
+    margin-bottom: 16px;
+  }
+
+  .hero-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+    margin-bottom: 14px;
+  }
+
+  .brand-kicker {
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+
+  .title {
+    font-size: clamp(24px, 2vw, 32px);
+    line-height: 1.05;
+    letter-spacing: -.025em;
+    font-weight: 820;
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 13px;
+    margin-top: 7px;
+    max-width: 680px;
+    line-height: 1.5;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .header-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 34px;
+    padding: 7px 11px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: rgba(30,34,43,.82);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 650;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .header-action:hover {
+    border-color: #4c5b73;
+    background: var(--panel-hover);
+  }
+
+  .overview-bar {
+    display: grid;
+    grid-template-columns: minmax(280px, 1.15fr) minmax(0, 2.85fr);
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .experiment-picker {
+    margin-top: 0;
+    min-height: 58px;
+    padding: 9px 11px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(23,26,33,.86);
+    display: grid;
+    grid-template-columns: auto minmax(150px, 1fr);
+    gap: 4px 10px;
+    align-items: center;
+  }
+
+  .experiment-picker label {
+    grid-column: 1 / -1;
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .09em;
+  }
+
+  .experiment-picker select {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    font-weight: 680;
+    padding: 7px 9px;
+  }
+
+  .experiment-picker-status {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .meta {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(105px, 1fr));
+    gap: 8px;
+  }
+
+  .badge {
+    min-height: 58px;
+    border-radius: 12px;
+    padding: 9px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+    background: rgba(23,26,33,.86);
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  .badge strong {
+    color: var(--text);
+    font-size: 12px;
+    letter-spacing: 0;
+    text-transform: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .badge:first-child { display:none; } /* Experiment selector already communicates dataset */
+
+  .panel {
+    box-shadow: 0 10px 30px rgba(0,0,0,.12);
+  }
+
+  .panel-title {
+    min-height: 43px;
+    padding: 10px 13px;
+    color: #b2bdcc;
+    font-size: 10px;
+    letter-spacing: .10em;
+    display: flex;
+    align-items: center;
+  }
+
+  .panel-title-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .panel-title-main small {
+    color: var(--muted);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 12px;
+    min-height: 0;
+  }
+
+  .tree-toolbar {
+    min-height: 42px;
+    padding: 7px 10px;
+    gap: 6px;
+  }
+
+  .tree-toolbar button,
+  .buttons button {
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
+  }
+
+  .tree-toolbar button:hover,
+  .buttons button:hover {
+    background: #252b36;
+  }
+
+  .tree-toolbar button:active,
+  .buttons button:active {
+    transform: translateY(1px);
+  }
+
+  .tree-legend {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .tree-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .tree-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    display: inline-block;
+  }
+
+  #treeViewport {
+    height: 620px;
+    background:
+      linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px),
+      var(--panel);
+    background-size: 24px 24px;
+  }
+
+  .memory-panel {
+    height: 705px;
+  }
+
+  .memory-panel .panel-title {
+    min-height: 43px;
+  }
+
+  .memory-header-tools {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    margin-left: auto;
+  }
+
+  .memory-filter {
+    width: 132px;
+    height: 27px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    outline: none;
+    background: #12151b;
+    color: var(--text);
+    font: inherit;
+    font-size: 10px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .memory-filter:focus {
+    border-color: rgba(192,153,255,.65);
+    box-shadow: 0 0 0 2px rgba(192,153,255,.08);
+  }
+
+  .memory-count {
+    min-width: 25px;
+  }
+
+  .memory-card {
+    transition: border-color .14s ease, background .14s ease, transform .14s ease;
+  }
+
+  .memory-card:hover {
+    border-color: #424b5c;
+    border-left-color: var(--memory);
+    background: #20242e;
+  }
+
+  .memory-card.filtered-out { display: none; }
+
+  .memory-card .name {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #f5f1ff;
+  }
+
+  .memory-card-phase {
+    color: #c7a9fb;
+    background: var(--memory-soft);
+    border: 1px solid rgba(192,153,255,.22);
+    border-radius: 999px;
+    padding: 2px 6px;
+    font-size: 9px;
+    font-weight: 750;
+  }
+
+  .memory-tree-wrap {
+    background:
+      radial-gradient(circle at 50% 20%, rgba(192,153,255,.035), transparent 60%),
+      #12151b;
+  }
+
+  .controls {
+    margin-top: 12px;
+    padding: 12px 14px 11px;
+    box-shadow: 0 10px 30px rgba(0,0,0,.10);
+  }
+
+  .controls::before {
+    content: "TIMELINE & PLAYBACK";
+    display: block;
+    margin-bottom: 9px;
+    color: #b2bdcc;
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: .10em;
+  }
+
+  .buttons {
+    margin-bottom: 10px;
+  }
+
+  #playBtn {
+    min-width: 84px;
+    border-color: rgba(122,162,247,.50);
+    background: var(--accent-soft);
+  }
+
+  .event {
+    padding: 5px 8px;
+    border-radius: 7px;
+    background: #12151b;
+  }
+
+  input[type=range] {
+    accent-color: var(--accent);
+  }
+
+  .event-legend {
+    justify-content: flex-start;
+    gap: 15px;
+  }
+
+  .analytics-grid {
+    gap: 12px;
+    margin-top: 12px;
+  }
+
+  .diagnostic-card {
+    min-height: 220px;
+  }
+
+  .footer {
+    margin-top: 14px;
+    padding: 12px 2px 2px;
+    color: #6f7b8d;
+    font-size: 10px;
+    display: flex;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .footer a {
+    color: #8fa8d9;
+    text-decoration: none;
+  }
+
+  .footer a:hover { text-decoration: underline; }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    place-items: center;
+    padding: 24px;
+    background: rgba(5,7,10,.72);
+    backdrop-filter: blur(5px);
+  }
+
+  .modal-backdrop.open { display: grid; }
+
+  .about-modal {
+    width: min(620px, 100%);
+    overflow: hidden;
+    border: 1px solid #343c49;
+    border-radius: 16px;
+    background: #171a21;
+    box-shadow: 0 24px 80px rgba(0,0,0,.45);
+  }
+
+  .about-modal-head {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    padding: 15px 17px;
+    border-bottom:1px solid var(--border);
+  }
+
+  .about-modal-head strong { font-size: 15px; }
+
+  .about-modal-body {
+    padding: 17px;
+    color: #c1c8d2;
+    font-size: 12px;
+    line-height: 1.65;
+  }
+
+  .about-modal-body p { margin: 0 0 13px; }
+
+  .about-legend {
+    display:grid;
+    grid-template-columns: repeat(2, minmax(0,1fr));
+    gap: 8px;
+    margin-top: 13px;
+  }
+
+  .about-legend > div {
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background:#12151b;
+  }
+
+  .about-modal-close {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display:grid;
+    place-items:center;
+    border-radius:8px;
+  }
+
+  @media (max-width: 1250px) {
+    .overview-bar { grid-template-columns: 1fr; }
+    .meta { grid-template-columns: repeat(5, minmax(110px,1fr)); }
+    .experiment-picker { grid-template-columns: auto 1fr; }
+  }
+
+  @media (max-width: 1050px) {
+    .grid { grid-template-columns: 1fr; }
+    .memory-panel { height: min(560px, 68vh); }
+    .meta { grid-template-columns: repeat(3, 1fr); }
+  }
+
+  @media (max-width: 720px) {
+    .app { padding: 14px 12px 24px; }
+    .hero-row { flex-direction: column; }
+    .header-actions { justify-content:flex-start; }
+    .meta { grid-template-columns: repeat(2, 1fr); }
+    .tree-legend { display:none; }
+    #treeViewport { height: 520px; }
+    .memory-filter { width: 110px; }
+    .about-legend { grid-template-columns:1fr; }
+  }
+
+
+  /* Event semantics:
+     purple = retained memory state
+     yellow = current decision/target
+     cyan   = successful reactivation */
+  .event-after-node rect,
+  .event-after-node circle {
+    stroke: var(--success) !important;
+    stroke-width: 4 !important;
+    filter: drop-shadow(0 0 8px rgba(86,207,225,.55));
+  }
+
+  .reactivation-highlight rect,
+  .reactivation-highlight circle {
+    stroke: var(--success) !important;
+    filter: drop-shadow(0 0 9px rgba(86,207,225,.58));
+  }
+
+
+  /* =========================================================
+     Event motion: make storage/reactivation spatially explicit
+     ========================================================= */
+  .action-overlay {
+    position: fixed;
+    z-index: 80;
+    width: 176px;
+    height: 126px;
+    border-radius: 12px;
+    background: rgba(18,21,27,.98);
+    box-shadow: 0 16px 42px rgba(0,0,0,.48);
+    overflow: visible;
+    pointer-events: none;
+    will-change: transform, opacity;
+  }
+
+  .action-overlay.store {
+    border: 2px solid var(--memory);
+    box-shadow:
+      0 0 0 1px rgba(192,153,255,.12),
+      0 16px 42px rgba(0,0,0,.48),
+      0 0 28px rgba(192,153,255,.18);
+  }
+
+  .action-overlay.reactivate {
+    border: 2px solid var(--success);
+    box-shadow:
+      0 0 0 1px rgba(86,207,225,.12),
+      0 16px 42px rgba(0,0,0,.48),
+      0 0 30px rgba(86,207,225,.20);
+  }
+
+  .action-overlay.prune {
+    border: 2px solid var(--warning);
+  }
+
+  .action-overlay-inner {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    border-radius: 10px;
+    background: #12151b;
+  }
+
+  .action-overlay svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .action-motion-label {
+    position: absolute;
+    left: 50%;
+    top: -30px;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    padding: 5px 9px;
+    border-radius: 999px;
+    background: rgba(15,17,21,.96);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  .action-overlay.store .action-motion-label {
+    color: #d8c0ff;
+    border-color: rgba(192,153,255,.45);
+  }
+
+  .action-overlay.reactivate .action-motion-label {
+    color: #9be9f3;
+    border-color: rgba(86,207,225,.48);
+  }
+
+  .motion-path-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 72;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .motion-path {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 7 8;
+    opacity: .72;
+    animation: motionDash .65s linear infinite;
+  }
+
+  .motion-path.store { stroke: var(--memory); }
+  .motion-path.reactivate { stroke: var(--success); }
+
+  @keyframes motionDash {
+    to { stroke-dashoffset: -30; }
+  }
+
+  .motion-destination-store {
+    animation: destinationStorePulse .9s ease-in-out infinite alternate;
+  }
+
+  .motion-destination-reactivate rect,
+  .motion-destination-reactivate circle {
+    stroke: var(--success) !important;
+    stroke-width: 5 !important;
+    filter: drop-shadow(0 0 11px rgba(86,207,225,.72));
+    animation: destinationNodePulse .7s ease-in-out infinite alternate;
+  }
+
+  @keyframes destinationStorePulse {
+    from {
+      box-shadow: inset 0 0 0 1px rgba(192,153,255,.12);
+    }
+    to {
+      box-shadow:
+        inset 0 0 0 2px rgba(192,153,255,.55),
+        0 0 30px rgba(192,153,255,.14);
+    }
+  }
+
+  @keyframes destinationNodePulse {
+    from { opacity: .78; }
+    to { opacity: 1; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .motion-path { animation: none; }
+    .motion-destination-store,
+    .motion-destination-reactivate rect,
+    .motion-destination-reactivate circle {
+      animation: none;
+    }
+  }
+
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="hero-row">
+      <div>
+        <div class="brand-kicker">Interactive research demo</div>
+        <div class="title">MemoryHoeffdingTree</div>
+        <div class="subtitle">
+          Explore how the active Hoeffding Tree changes over time, which pruned subtrees are retained in memory,
+          and when previously stored structures are reactivated.
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <button id="aboutBtn" class="header-action" type="button">ⓘ How to read</button>
+        <a class="header-action" href="https://github.com/tuanminh201/memoryht-visualizer" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="overview-bar">
+      <div class="experiment-picker">
+        <label for="experimentSelector">Experiment</label>
+        <select id="experimentSelector" disabled>
+          <option>Loading experiments...</option>
+        </select>
+        <span id="experimentPickerStatus" class="experiment-picker-status"></span>
+      </div>
+
+      <div class="meta">
+        <div class="badge">Dataset <strong id="experimentText">–</strong></div>
+        <div class="badge snapshot-badge">Instance <strong id="instanceText">–</strong></div>
+        <div class="badge snapshot-badge">Phase <strong id="phaseText">–</strong></div>
+        <div class="badge">Timeline <strong id="frameText">–</strong></div>
+        <div class="badge">Last reactivation <strong id="lastReactText">–</strong></div>
+        <div class="badge">Playback <strong id="eventText">snapshot</strong></div>
+        <div id="frameKindBadge" class="badge frame-kind-badge">Frame kind <strong id="frameKindText">SNAPSHOT</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="panel-title">Active tree</div>
+      <div class="tree-toolbar">
+        <button id="zoomOutBtn">− Zoom</button>
+        <button id="zoomInBtn">+ Zoom</button>
+        <button id="resetViewBtn">Reset view</button>
+        
+      </div>
+      <div id="treeViewport">
+        <div id="treeCanvas">
+          <svg id="treeSvg"></svg>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel memory-panel">
+      <div class="panel-title">
+        <div class="panel-title-main">
+          <span>Historical Subtree Memory</span>
+          <small>Retained pruned subtrees available for reuse</small>
+        </div>
+        <div class="memory-header-tools">
+          <input id="memoryFilter" class="memory-filter" type="search" placeholder="Filter memory…" aria-label="Filter stored subtrees" />
+          <span id="memoryCount" class="memory-count" title="Stored subtrees">0</span>
+        </div>
+      </div>
+      <div id="memoryList" class="memory-list"></div>
+    </aside>
+  </div>
+
+  <div class="controls">
+    <div class="buttons">
+      <button id="prevBtn">⏮ Prev</button>
+      <button id="playBtn">▶ Play</button>
+      <button id="nextBtn">Next ⏭</button>
+      <label style="color:var(--muted);font-size:12px">Speed
+        <select id="speedSelect">
+          <option value="1600">0.5×</option>
+          <option value="850" selected>1×</option>
+          <option value="400">2×</option>
+          <option value="180">4×</option>
+        </select>
+      </label>
+      <div class="event" id="statsText"></div>
+    </div>
+    <div class="timeline-wrap">
+      <div id="eventMarkers" class="event-markers"></div>
+      <input id="frameSlider" type="range" min="0" max="0" value="0" step="1" />
+    </div>
+    <div class="slider-labels">
+      <span id="minInstance">0</span>
+      <span id="maxInstance">0</span>
+    </div>
+    <div class="event-legend">
+      <span><i class="legend-dot" style="background:var(--memory)"></i>Store</span>
+      <span><i class="legend-dot" style="background:var(--success)"></i>Reactivate</span>
+      <span><i class="legend-dot" style="background:#e6c07b"></i>Prune</span>
+      <span id="eventDataStatus"></span>
+    </div>
+  </div>
+
+  <div class="analytics-grid">
+    <section class="panel">
+      <div class="panel-title"><div class="panel-title-main"><span>Predictive Accuracy</span><small>Performance across the stream and current window</small></div></div>
+      <div class="analytics-body">
+        <svg id="accuracyChart"></svg>
+        <div class="chart-legend">
+          <span><i class="line-sample" style="background:#7aa2f7"></i>Cumulative accuracy</span>
+          <span><i class="line-sample" style="background:#56cfe1"></i>Window accuracy (1000)</span>
+          <span><i class="line-sample" style="background:#56cfe1"></i>Reactivation</span>
+          <span><i class="line-sample" style="background:#f1f3f5"></i>Current timeline position</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-title"><div class="panel-title-main"><span>Event Diagnostics</span><small>Details for pruning, storage, and reactivation decisions</small></div></div>
+      <div class="analytics-body">
+        <div id="diagnosticPanel" class="diagnostic-card"></div>
+
+      </div>
+    </section>
+  </div>
+
+  <footer class="footer">
+    <span>MemoryHoeffdingTree · interactive thesis companion</span>
+    <span>Tip: use the timeline markers to jump directly to structural events.</span>
+  </footer>
+</div>
+
+<div id="tooltip" class="tooltip"></div>
+
+<div id="aboutBackdrop" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+  <div class="about-modal">
+    <div class="about-modal-head">
+      <strong id="aboutTitle">How to read the visualizer</strong>
+      <button id="aboutCloseBtn" class="about-modal-close" type="button" aria-label="Close">×</button>
+    </div>
+    <div class="about-modal-body">
+      <p>
+        Move through the stream with the timeline or playback controls. The left panel shows the active Hoeffding Tree,
+        while the memory panel shows subtrees that were pruned and retained for possible later reuse.
+      </p>
+      <p>
+        Event frames follow the pruning workflow used by MemoryHoeffdingTree. Yellow marks the active subtree that is about to be replaced. During successful reactivation, the selected stored subtree moves from memory to exactly that position in the active tree. If the replaced subtree is admitted to historical memory, it simultaneously moves in the opposite direction; otherwise it is not shown as stored.
+        Purple indicates a subtree that is retained in historical memory; yellow is a temporary event highlight for the
+        subtree or node currently involved in pruning or matching; cyan indicates that a stored subtree has been
+        successfully reactivated into the active tree. Hover over tree nodes for node-level details and use the memory
+        filter when many stored subtrees are present.
+      </p>
+      <p style="color:var(--muted);font-size:11px">
+        Thesis notation: the subtree being replaced corresponds to <strong>C<sub>t</sub></strong>,
+        while the stored subtree selected for reactivation corresponds to <strong>M*</strong>.
+      </p>
+      <div class="about-legend">
+        <div><span class="tree-legend-dot" style="background:var(--split);margin-right:7px"></span><strong>Blue</strong> — active split node</div>
+        <div><span class="tree-legend-dot" style="background:var(--leaf);margin-right:7px"></span><strong>Green</strong> — active leaf node</div>
+        <div><span class="tree-legend-dot" style="background:var(--memory);margin-right:7px"></span><strong>Purple</strong> — subtree retained in historical memory</div>
+        <div><span class="tree-legend-dot" style="background:var(--warning);margin-right:7px"></span><strong>Yellow</strong> — subtree currently being replaced</div>
+        <div><span class="tree-legend-dot" style="background:var(--success);margin-right:7px"></span><strong>Cyan</strong> — stored subtree selected for reactivation</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+
+<script>
+  (function () {
+    const backdrop = document.getElementById('aboutBackdrop');
+    const openBtn = document.getElementById('aboutBtn');
+    const closeBtn = document.getElementById('aboutCloseBtn');
+
+    function openAbout() {
+      if (!backdrop) return;
+      backdrop.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeAbout() {
+      if (!backdrop) return;
+      backdrop.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    openBtn?.addEventListener('click', openAbout);
+    closeBtn?.addEventListener('click', closeAbout);
+    backdrop?.addEventListener('click', event => {
+      if (event.target === backdrop) closeAbout();
+    });
+    window.addEventListener('keydown', event => {
+      if (event.key === 'Escape') closeAbout();
+    });
+  })();
+</script>
+
+<script src="visualization_manifest.js"></script>
+<script>
+/*
+ * Experiment loader
+ *
+ * Preferred layout:
+ *   memoryht_visualizer.html
+ *   visualization_manifest.js
+ *   data/<experiment>.js
+ *
+ * Backward-compatible fallback:
+ *   visualization_data.js
+ */
+function showVisualizerLoadError(message, details = "") {
+  document.body.innerHTML = `
+    <div class="loading-screen">
+      <div class="loading-card">
+        <h2>Could not load visualization data</h2>
+        <p>${message}</p>
+        ${details ? `<p><code>${details}</code></p>` : ""}
+      </div>
+    </div>
+  `;
+}
+
+function loadExternalScript(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.onload = () => resolve(src);
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+function normalizeManifest(rawManifest) {
+  if (Array.isArray(rawManifest)) {
+    return rawManifest;
+  }
+
+  if (rawManifest && Array.isArray(rawManifest.experiments)) {
+    return rawManifest.experiments;
+  }
+
+  return [];
+}
+
+function chooseExperiment(experiments) {
+  const params = new URLSearchParams(window.location.search);
+  const requestedId = params.get("experiment");
+
+  if (requestedId) {
+    const requested = experiments.find(
+      experiment => String(experiment.id) === requestedId
+    );
+
+    if (requested) {
+      return requested;
+    }
+  }
+
+  return experiments.find(experiment => experiment.default === true)
+    || experiments[0]
+    || null;
+}
+
+function configureExperimentSelector(experiments, selectedExperiment) {
+  const selector = document.getElementById("experimentSelector");
+  const status = document.getElementById("experimentPickerStatus");
+
+  selector.innerHTML = "";
+
+  if (experiments.length === 0) {
+    const option = document.createElement("option");
+    option.textContent = "Legacy single-file mode";
+    option.value = "";
+    selector.appendChild(option);
+    selector.disabled = true;
+    status.textContent = "visualization_data.js";
+    return;
+  }
+
+  const groups = new Map();
+
+  experiments.forEach(experiment => {
+    const category = experiment.category || "Experiments";
+
+    if (!groups.has(category)) {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = category;
+      selector.appendChild(optgroup);
+      groups.set(category, optgroup);
+    }
+
+    const option = document.createElement("option");
+    option.value = String(experiment.id);
+    option.textContent = experiment.label || experiment.name || experiment.id;
+    option.selected =
+      selectedExperiment
+      && String(experiment.id) === String(selectedExperiment.id);
+
+    groups.get(category).appendChild(option);
+  });
+
+  selector.disabled = experiments.length <= 1;
+  status.textContent =
+    selectedExperiment && selectedExperiment.file
+      ? selectedExperiment.file
+      : "";
+
+  selector.addEventListener("change", () => {
+    const nextUrl = new URL(window.location.href);
+    nextUrl.searchParams.set("experiment", selector.value);
+    window.location.href = nextUrl.toString();
+  });
+}
+
+async function bootstrapMemoryHTVisualizer() {
+  const experiments = normalizeManifest(window.MEMORY_HT_EXPERIMENTS);
+  const selectedExperiment = chooseExperiment(experiments);
+
+  configureExperimentSelector(experiments, selectedExperiment);
+
+  try {
+    if (selectedExperiment) {
+      if (!selectedExperiment.file) {
+        throw new Error(
+          `Experiment "${selectedExperiment.id}" has no data file.`
+        );
+      }
+
+      window.MEMORY_HT_DATA = undefined;
+      await loadExternalScript(selectedExperiment.file);
+    } else if (!window.MEMORY_HT_DATA) {
+      await loadExternalScript("visualization_data.js");
+    }
+
+    if (
+      !window.MEMORY_HT_DATA
+      || !Array.isArray(window.MEMORY_HT_DATA.frames)
+      || window.MEMORY_HT_DATA.frames.length === 0
+    ) {
+      throw new Error("Loaded file does not contain valid MEMORY_HT_DATA.");
+    }
+
+    startMemoryHTVisualizer();
+  } catch (error) {
+    showVisualizerLoadError(
+      "Check the manifest entry and make sure the selected data file exists next to the visualizer.",
+      error instanceof Error ? error.message : String(error)
+    );
+  }
+}
+
+function startMemoryHTVisualizer() {
+  const data = window.MEMORY_HT_DATA;
+  if (!data || !Array.isArray(data.frames) || data.frames.length === 0) {
+    document.body.innerHTML = '<div style="padding:30px;color:white;font-family:sans-serif">No visualization data found. Put <b>visualization_data.js</b> next to this HTML file.</div>';
+    return;
+  }
+
+  const snapshots = data.frames;
+  const events = Array.isArray(data.events) ? data.events : [];
+
+  
+  const timelineFrames = buildUnifiedTimeline(
+    snapshots,
+    events
+  );
+
+  const frames = timelineFrames;
+
+  let index = 0;
+  let timer = null;
+  let actionOverlay = null;
+  let eventAnimationActive = false;
+
+
+  function cloneFrameBase(frame) {
+    return {
+      instance: frame.instance,
+      phase: frame.phase,
+      nodeCount: frame.nodeCount,
+      pruned: frame.pruned,
+      reactivated: frame.reactivated,
+      accuracy: frame.accuracy,
+      windowAccuracy: frame.windowAccuracy,
+      tree: frame.tree,
+      memory: frame.memory
+    };
+  }
+
+
+  function buildUnifiedTimeline(snapshotFrames, eventList) {
+    const result = [];
+
+    const sortedEvents =
+      [...eventList].sort(
+        (a, b) =>
+          Number(a.instance)
+          - Number(b.instance)
+      );
+
+    
+    const eventsByInstance =
+      new Map();
+
+    sortedEvents.forEach(event => {
+      const key =
+        Number(event.instance);
+
+      if (!eventsByInstance.has(key)) {
+        eventsByInstance.set(
+          key,
+          []
+        );
+      }
+
+      eventsByInstance
+        .get(key)
+        .push(event);
+    });
+
+
+    
+    if (snapshotFrames.length > 0) {
+      result.push({
+        ...cloneFrameBase(snapshotFrames[0]),
+        kind: 'SNAPSHOT',
+        label: `Snapshot ${snapshotFrames[0].instance}`
+      });
+    }
+
+
+    for (
+      let s = 1;
+      s < snapshotFrames.length;
+      s++
+    ) {
+
+      const previousSnapshot =
+        snapshotFrames[s - 1];
+
+      const currentSnapshot =
+        snapshotFrames[s];
+
+      
+      const intervalEvents =
+        sortedEvents.filter(event => {
+          const x =
+            Number(event.instance);
+
+          return (
+            x > Number(previousSnapshot.instance)
+            && x <= Number(currentSnapshot.instance)
+          );
+        });
+
+
+      for (const event of intervalEvents) {
+
+        
+        result.push({
+          instance: event.instance,
+          phase: event.phase,
+          nodeCount: null,
+          pruned: null,
+          reactivated: null,
+          accuracy: null,
+          windowAccuracy: null,
+          tree: event.treeBefore,
+          memory: event.memoryBefore,
+          kind: 'EVENT_BEFORE',
+          event,
+          label: `${event.type} before`
+        });
+
+
+        
+        result.push({
+          instance: event.instance,
+          phase: event.phase,
+          nodeCount: null,
+          pruned: null,
+          reactivated: null,
+          accuracy: null,
+          windowAccuracy: null,
+          tree: event.treeBefore,
+          memory: event.memoryBefore,
+          kind: 'EVENT_ACTION',
+          event,
+          label: `${event.type} action`
+        });
+
+
+        
+        result.push({
+          instance: event.instance,
+          phase: event.phase,
+          nodeCount: null,
+          pruned: null,
+          reactivated: null,
+          accuracy: null,
+          windowAccuracy: null,
+          tree: event.treeAfter,
+          memory: event.memoryAfter,
+          kind: 'EVENT_AFTER',
+          event,
+          label: `${event.type} after`
+        });
+      }
+
+
+      
+      result.push({
+        ...cloneFrameBase(currentSnapshot),
+        kind: 'SNAPSHOT',
+        label: `Snapshot ${currentSnapshot.instance}`
+      });
+    }
+
+
+    return result;
+  }
+
+
+  const svg = document.getElementById('treeSvg');
+  const treeViewport = document.getElementById('treeViewport');
+  const treeCanvas = document.getElementById('treeCanvas');
+  const memoryList = document.getElementById('memoryList');
+  const memoryCount = document.getElementById('memoryCount');
+  const memoryFilter = document.getElementById('memoryFilter');
+  const slider = document.getElementById('frameSlider');
+  const playBtn = document.getElementById('playBtn');
+  const speedSelect = document.getElementById('speedSelect');
+  const tooltip = document.getElementById('tooltip');
+  const eventMarkers = document.getElementById('eventMarkers');
+  const eventDataStatus = document.getElementById('eventDataStatus');
+  const frameKindBadge = document.getElementById('frameKindBadge');
+  const frameKindText = document.getElementById('frameKindText');
+  const experimentText = document.getElementById('experimentText');
+  const accuracyChart = document.getElementById('accuracyChart');
+  const diagnosticPanel = document.getElementById('diagnosticPanel');
+  const eventStage = document.getElementById('eventStage');
+  const stageBefore = document.getElementById('stageBefore');
+  const stageAfter = document.getElementById('stageAfter');
+  const stageEventBox = document.getElementById('stageEventBox');
+  const stageEventType = document.getElementById('stageEventType');
+  const stageEventMeta = document.getElementById('stageEventMeta');
+  const stageEventStatus = document.getElementById('stageEventStatus');
+
+  slider.max = frames.length - 1;
+  document.getElementById('minInstance').textContent = snapshots[0].instance;
+  document.getElementById('maxInstance').textContent = snapshots[snapshots.length - 1].instance;
+
+
+  let svgContentWidth = 900;
+  let svgContentHeight = 600;
+
+  let viewBoxX = 0;
+  let viewBoxY = 0;
+  let viewBoxW = 900;
+  let viewBoxH = 600;
+
+  let dragging = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragStartViewBoxX = 0;
+  let dragStartViewBoxY = 0;
+
+  function applyViewBox() {
+    svg.setAttribute(
+      'viewBox',
+      `${viewBoxX} ${viewBoxY} ${viewBoxW} ${viewBoxH}`
+    );
+  }
+
+  function resetView() {
+    
+    const marginX = Math.max(30, svgContentWidth * 0.03);
+    const marginY = Math.max(30, svgContentHeight * 0.03);
+
+    viewBoxX = -marginX;
+    viewBoxY = -marginY;
+    viewBoxW = svgContentWidth + marginX * 2;
+    viewBoxH = svgContentHeight + marginY * 2;
+
+    applyViewBox();
+  }
+
+  function zoomAt(factor, clientX=null, clientY=null) {
+    const rect = treeViewport.getBoundingClientRect();
+
+    const px =
+      clientX == null
+        ? rect.width / 2
+        : clientX - rect.left;
+
+    const py =
+      clientY == null
+        ? rect.height / 2
+        : clientY - rect.top;
+
+    const fx = rect.width === 0 ? 0.5 : px / rect.width;
+    const fy = rect.height === 0 ? 0.5 : py / rect.height;
+
+    const svgPointX =
+      viewBoxX + fx * viewBoxW;
+
+    const svgPointY =
+      viewBoxY + fy * viewBoxH;
+
+    
+    const nextW =
+      Math.max(
+        120,
+        Math.min(
+          svgContentWidth * 3,
+          viewBoxW / factor
+        )
+      );
+
+    const nextH =
+      Math.max(
+        100,
+        Math.min(
+          svgContentHeight * 3,
+          viewBoxH / factor
+        )
+      );
+
+    viewBoxX =
+      svgPointX - fx * nextW;
+
+    viewBoxY =
+      svgPointY - fy * nextH;
+
+    viewBoxW = nextW;
+    viewBoxH = nextH;
+
+    applyViewBox();
+  }
+
+  treeViewport.addEventListener('mousedown', e => {
+    dragging = true;
+    treeViewport.classList.add('dragging');
+
+    dragStartX = e.clientX;
+    dragStartY = e.clientY;
+
+    dragStartViewBoxX = viewBoxX;
+    dragStartViewBoxY = viewBoxY;
+  });
+
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+
+    const rect =
+      treeViewport.getBoundingClientRect();
+
+    if (
+      rect.width <= 0
+      || rect.height <= 0
+    ) {
+      return;
+    }
+
+    const dxPixels =
+      e.clientX - dragStartX;
+
+    const dyPixels =
+      e.clientY - dragStartY;
+
+    
+    viewBoxX =
+      dragStartViewBoxX
+      - dxPixels * (viewBoxW / rect.width);
+
+    viewBoxY =
+      dragStartViewBoxY
+      - dyPixels * (viewBoxH / rect.height);
+
+    applyViewBox();
+  });
+
+  window.addEventListener('mouseup', () => {
+    dragging = false;
+    treeViewport.classList.remove('dragging');
+  });
+
+  treeViewport.addEventListener(
+    'wheel',
+    e => {
+      e.preventDefault();
+
+      zoomAt(
+        e.deltaY < 0 ? 1.15 : 0.87,
+        e.clientX,
+        e.clientY
+      );
+    },
+    {
+      passive: false
+    }
+  );
+
+  document
+    .getElementById('zoomInBtn')
+    .onclick =
+      () => zoomAt(1.22);
+
+  document
+    .getElementById('zoomOutBtn')
+    .onclick =
+      () => zoomAt(0.82);
+
+  document
+    .getElementById('resetViewBtn')
+    .onclick =
+      resetView;
+
+
+  function flatten(root) {
+    const nodes = [];
+    const links = [];
+    if (!root) return {nodes, links, maxDepth:0};
+
+    function walk(node, depth, parent=null, branch=null) {
+      node._depth = depth;
+      node._children = (node.children || []).filter(Boolean);
+      nodes.push(node);
+      if (parent) links.push({source: parent, target: node, branch});
+      node._children.forEach((c, i) => walk(c, depth + 1, node, i));
+    }
+    walk(root, 0);
+
+    const byDepth = new Map();
+    nodes.forEach(n => {
+      if (!byDepth.has(n._depth)) byDepth.set(n._depth, []);
+      byDepth.get(n._depth).push(n);
+    });
+
+    const width = Math.max(900, ...[...byDepth.values()].map(a => a.length * 120 + 120));
+    const height = Math.max(600, (Math.max(...nodes.map(n => n._depth)) + 1) * 105 + 80);
+
+    byDepth.forEach((arr, depth) => {
+      const spacing = width / (arr.length + 1);
+      arr.forEach((n, i) => {
+        n._x = spacing * (i + 1);
+        n._y = 65 + depth * 100;
+      });
+    });
+
+    return {nodes, links, width, height};
+  }
+
+  function el(name, attrs={}) {
+    const e = document.createElementNS('http://www.w3.org/2000/svg', name);
+    Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k, v));
+    return e;
+  }
+
+  function renderTree(root) {
+    svg.innerHTML = '';
+    const graph = flatten(root);
+    svgContentWidth = graph.width || 900;
+    svgContentHeight = graph.height || 600;
+
+    
+    svg.removeAttribute('height');
+
+    graph.links.forEach(l => {
+      const path = el('path', {
+        class: 'edge',
+        d: `M ${l.source._x} ${l.source._y+25} C ${l.source._x} ${l.source._y+55}, ${l.target._x} ${l.target._y-55}, ${l.target._x} ${l.target._y-25}`
+      });
+      svg.appendChild(path);
+
+      const bt = el('text', {
+        x: (l.source._x + l.target._x)/2,
+        y: (l.source._y + l.target._y)/2 - 3,
+        fill: '#778195',
+        'font-size':'9',
+        'text-anchor':'middle'
+      });
+      bt.textContent = `b${l.branch}`;
+      svg.appendChild(bt);
+    });
+
+    graph.nodes.forEach(n => {
+      const g = el('g', {transform:`translate(${n._x},${n._y})`});
+      g.setAttribute('data-node-id', n.id ?? '');
+      const isSplit = n.type === 'split';
+      const shape = isSplit
+        ? el('rect', {x:-38,y:-24,width:76,height:48,rx:10,class:'split-node'})
+        : el('circle', {cx:0,cy:0,r:24,class:'leaf-node'});
+      g.appendChild(shape);
+
+      const label = el('text', {x:0,y:isSplit?-3:0,class:'node-label'});
+      label.textContent = isSplit ? `X${n.attribute}` : 'Leaf';
+      g.appendChild(label);
+
+      if (isSplit) {
+        const sub = el('text', {x:0,y:12,class:'node-sub'});
+        sub.textContent = `d=${n.depth ?? n._depth}`;
+        g.appendChild(sub);
+      }
+
+      g.addEventListener('mousemove', ev => {
+        const dist = Array.isArray(n.classDistribution) ? n.classDistribution.map(v => Number(v).toFixed(1)).join(', ') : '–';
+        tooltip.style.display = 'block';
+        tooltip.style.left = `${ev.clientX + 12}px`;
+        tooltip.style.top = `${ev.clientY + 12}px`;
+        tooltip.innerHTML =
+          `<b>${isSplit ? `Split X${n.attribute}` : 'Leaf'}</b><br>` +
+          `Depth: ${n.depth ?? n._depth}<br>` +
+          `Node id: ${n.id ?? '–'}<br>` +
+          `Class dist: [${dist}]`;
+      });
+      g.addEventListener('mouseleave', () => tooltip.style.display='none');
+
+      svg.appendChild(g);
+    });
+
+    resetView();
+  }
+
+
+  function renderMiniTree(svgElement, root) {
+    svgElement.innerHTML = '';
+
+    if (!root) {
+      const empty = document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'text'
+      );
+      empty.setAttribute('x', '50%');
+      empty.setAttribute('y', '50%');
+      empty.setAttribute('fill', '#9aa4b2');
+      empty.setAttribute('text-anchor', 'middle');
+      empty.textContent = 'No stored tree data';
+      svgElement.appendChild(empty);
+      return;
+    }
+
+    const nodes = [];
+    const links = [];
+
+    function walk(node, depth, parent=null, branch=null) {
+      node._miniDepth = depth;
+      node._miniChildren =
+        Array.isArray(node.children)
+          ? node.children.filter(Boolean)
+          : [];
+
+      nodes.push(node);
+
+      if (parent) {
+        links.push({
+          source: parent,
+          target: node,
+          branch
+        });
+      }
+
+      node._miniChildren.forEach(
+        (child, i) => walk(
+          child,
+          depth + 1,
+          node,
+          i
+        )
+      );
+    }
+
+    walk(root, 0);
+
+    const byDepth = new Map();
+
+    nodes.forEach(node => {
+      if (!byDepth.has(node._miniDepth)) {
+        byDepth.set(
+          node._miniDepth,
+          []
+        );
+      }
+
+      byDepth
+        .get(node._miniDepth)
+        .push(node);
+    });
+
+    const maxDepth =
+      Math.max(
+        0,
+        ...nodes.map(
+          node => node._miniDepth
+        )
+      );
+
+    const width = 300;
+    const height =
+      Math.max(
+        150,
+        55 + (maxDepth + 1) * 58
+      );
+
+    byDepth.forEach(
+      (row, depth) => {
+
+        const spacing =
+          width / (row.length + 1);
+
+        row.forEach(
+          (node, i) => {
+
+            node._miniX =
+              spacing * (i + 1);
+
+            node._miniY =
+              35 + depth * 55;
+          }
+        );
+      }
+    );
+
+    svgElement.setAttribute(
+      'viewBox',
+      `0 0 ${width} ${height}`
+    );
+
+    links.forEach(link => {
+
+      const path =
+        document.createElementNS(
+          'http://www.w3.org/2000/svg',
+          'path'
+        );
+
+      path.setAttribute(
+        'class',
+        'memory-edge'
+      );
+
+      path.setAttribute(
+        'd',
+        `M ${link.source._miniX} ${link.source._miniY + 16}
+         C ${link.source._miniX} ${link.source._miniY + 30},
+           ${link.target._miniX} ${link.target._miniY - 30},
+           ${link.target._miniX} ${link.target._miniY - 16}`
+      );
+
+      svgElement.appendChild(
+        path
+      );
+
+
+      const branch =
+        document.createElementNS(
+          'http://www.w3.org/2000/svg',
+          'text'
+        );
+
+      branch.setAttribute(
+        'x',
+        (
+          link.source._miniX
+          + link.target._miniX
+        ) / 2
+      );
+
+      branch.setAttribute(
+        'y',
+        (
+          link.source._miniY
+          + link.target._miniY
+        ) / 2 - 2
+      );
+
+      branch.setAttribute(
+        'fill',
+        '#778195'
+      );
+
+      branch.setAttribute(
+        'font-size',
+        '7'
+      );
+
+      branch.setAttribute(
+        'text-anchor',
+        'middle'
+      );
+
+      branch.textContent =
+        `b${link.branch}`;
+
+      svgElement.appendChild(
+        branch
+      );
+    });
+
+
+    nodes.forEach(node => {
+
+      const group =
+        document.createElementNS(
+          'http://www.w3.org/2000/svg',
+          'g'
+        );
+
+      group.setAttribute(
+        'transform',
+        `translate(${node._miniX},${node._miniY})`
+      );
+
+      const isSplit =
+        node.type === 'split';
+
+
+      if (isSplit) {
+
+        const rect =
+          document.createElementNS(
+            'http://www.w3.org/2000/svg',
+            'rect'
+          );
+
+        rect.setAttribute(
+          'x',
+          '-27'
+        );
+
+        rect.setAttribute(
+          'y',
+          '-15'
+        );
+
+        rect.setAttribute(
+          'width',
+          '54'
+        );
+
+        rect.setAttribute(
+          'height',
+          '30'
+        );
+
+        rect.setAttribute(
+          'rx',
+          '8'
+        );
+
+        rect.setAttribute(
+          'class',
+          'memory-split-node'
+        );
+
+        group.appendChild(
+          rect
+        );
+
+      } else {
+
+        const circle =
+          document.createElementNS(
+            'http://www.w3.org/2000/svg',
+            'circle'
+          );
+
+        circle.setAttribute(
+          'cx',
+          '0'
+        );
+
+        circle.setAttribute(
+          'cy',
+          '0'
+        );
+
+        circle.setAttribute(
+          'r',
+          '14'
+        );
+
+        circle.setAttribute(
+          'class',
+          'memory-leaf-node'
+        );
+
+        group.appendChild(
+          circle
+        );
+      }
+
+
+      const label =
+        document.createElementNS(
+          'http://www.w3.org/2000/svg',
+          'text'
+        );
+
+      label.setAttribute(
+        'class',
+        'memory-tree-label'
+      );
+
+      label.setAttribute(
+        'x',
+        '0'
+      );
+
+      label.setAttribute(
+        'y',
+        isSplit ? '-1' : '0'
+      );
+
+      label.textContent =
+        isSplit
+          ? `X${node.attribute}`
+          : 'Leaf';
+
+      group.appendChild(
+        label
+      );
+
+
+      if (isSplit) {
+
+        const sub =
+          document.createElementNS(
+            'http://www.w3.org/2000/svg',
+            'text'
+          );
+
+        sub.setAttribute(
+          'class',
+          'memory-tree-sub'
+        );
+
+        sub.setAttribute(
+          'x',
+          '0'
+        );
+
+        sub.setAttribute(
+          'y',
+          '10'
+        );
+
+        sub.textContent =
+          `d=${node.depth ?? node._miniDepth}`;
+
+        group.appendChild(
+          sub
+        );
+      }
+
+
+      group.addEventListener(
+        'mousemove',
+        event => {
+
+          const dist =
+            Array.isArray(
+              node.classDistribution
+            )
+              ? node.classDistribution
+                  .map(
+                    value =>
+                      Number(value)
+                        .toFixed(1)
+                  )
+                  .join(', ')
+              : '–';
+
+          tooltip.style.display =
+            'block';
+
+          tooltip.style.left =
+            `${event.clientX + 12}px`;
+
+          tooltip.style.top =
+            `${event.clientY + 12}px`;
+
+          tooltip.innerHTML =
+            `<b>${isSplit ? `Stored split X${node.attribute}` : 'Stored leaf'}</b><br>` +
+            `Depth: ${node.depth ?? node._miniDepth}<br>` +
+            `Class dist: [${dist}]`;
+        }
+      );
+
+      group.addEventListener(
+        'mouseleave',
+        () => {
+          tooltip.style.display =
+            'none';
+        }
+      );
+
+
+      svgElement.appendChild(
+        group
+      );
+    });
+  }
+
+
+  function applyMemoryFilter() {
+    if (!memoryFilter) return;
+
+    const query = memoryFilter.value.trim().toLowerCase();
+    const cards = memoryList.querySelectorAll('.memory-card');
+    let visible = 0;
+
+    cards.forEach(card => {
+      const haystack = (card.getAttribute('data-search') || '').toLowerCase();
+      const matches = !query || haystack.includes(query);
+      card.classList.toggle('filtered-out', !matches);
+      if (matches) visible++;
+    });
+
+    if (memoryCount) {
+      const total = cards.length;
+      memoryCount.textContent = query ? `${visible}/${total}` : String(total);
+      memoryCount.title = query
+        ? `${visible} of ${total} stored subtrees shown`
+        : `${total} stored subtree${total === 1 ? '' : 's'}`;
+    }
+  }
+
+  if (memoryFilter) {
+    memoryFilter.addEventListener('input', applyMemoryFilter);
+  }
+
+
+  function renderMemory(memory) {
+    memoryList.innerHTML = '';
+
+    const storedCount = Array.isArray(memory) ? memory.length : 0;
+    if (memoryCount) {
+      memoryCount.textContent = String(storedCount);
+      memoryCount.title = `${storedCount} stored subtree${storedCount === 1 ? '' : 's'}`;
+    }
+
+    if (
+      !memory
+      || memory.length === 0
+    ) {
+
+      memoryList.innerHTML =
+        '<div class="empty">Memory is empty</div>';
+
+      return;
+    }
+
+
+    memory.forEach(m => {
+
+      const card =
+        document.createElement(
+          'div'
+        );
+
+      card.className =
+        'memory-card';
+
+      card.setAttribute(
+        'data-stored-id',
+        String(m.id)
+      );
+
+      card.setAttribute(
+        'data-search',
+        [
+          `stored ${m.id ?? ''}`,
+          `phase ${m.storedPhase ?? ''}`,
+          `root x${m.rootFeature ?? ''}`,
+          `size ${m.size ?? ''}`,
+          `depth ${m.depth ?? ''}`,
+          `stored ${m.storedAt ?? ''}`
+        ].join(' ')
+      );
+
+
+      const title =
+        document.createElement(
+          'div'
+        );
+
+      title.className =
+        'name';
+
+      title.innerHTML =
+        `<span>Stored #${m.id}</span><span class="memory-card-phase">${m.storedPhase ?? '–'}</span>`;
+
+      card.appendChild(
+        title
+      );
+
+
+      const treeWrap =
+        document.createElement(
+          'div'
+        );
+
+      treeWrap.className =
+        'memory-tree-wrap';
+
+
+      const miniSvg =
+        document.createElementNS(
+          'http://www.w3.org/2000/svg',
+          'svg'
+        );
+
+      miniSvg.setAttribute(
+        'class',
+        'memory-tree-svg'
+      );
+
+      treeWrap.appendChild(
+        miniSvg
+      );
+
+      card.appendChild(
+        treeWrap
+      );
+
+
+      const details =
+        document.createElement(
+          'div'
+        );
+
+      details.className =
+        'kv';
+
+      details.innerHTML = `
+        <span>Phase</span><strong>${m.storedPhase ?? '–'}</strong>
+        <span>Root feature</span><strong>${m.rootFeature == null ? '–' : `X${m.rootFeature}`}</strong>
+        <span>Size</span><strong>${m.size ?? '–'}</strong>
+        <span>Depth</span><strong>${m.depth ?? '–'}</strong>
+        <span>Stored at</span><strong>${m.storedAt ?? '–'}</strong>
+        <span>Reuse</span><strong>${m.reuseCount ?? 0}</strong>
+        <span>Recent acc.</span><strong>${m.recentAccuracy == null ? '–' : Number(m.recentAccuracy).toFixed(3)}</strong>
+      `;
+
+      card.appendChild(
+        details
+      );
+
+
+      memoryList.appendChild(
+        card
+      );
+
+
+      renderMiniTree(
+        miniSvg,
+        m.tree
+      );
+    });
+
+    applyMemoryFilter();
+  }
+
+
+  function displayPhase(value) {
+    if (
+      value == null
+      || String(value).trim() === ''
+      || String(value).toLowerCase() === 'unknown'
+    ) {
+      return '–';
+    }
+
+    return String(value);
+  }
+
+
+  function eventLabel(event) {
+    if (!event) return 'none';
+
+    if (event.type === 'PRUNE_STORE') {
+      return `PRUNE → STORE #${event.storedId}`;
+    }
+
+    if (event.type === 'REACTIVATE') {
+      return `REACTIVATE #${event.storedId}`;
+    }
+
+    return 'PRUNE';
+  }
+
+
+  function eventClass(event) {
+    if (!event) return '';
+
+    if (event.type === 'PRUNE_STORE') return 'store';
+    if (event.type === 'REACTIVATE') return 'reactivate';
+
+    return 'prune';
+  }
+
+
+  function clearActionOverlay() {
+    document
+      .querySelectorAll('.action-overlay')
+      .forEach(el => el.remove());
+
+    actionOverlay = null;
+
+    svg
+      .querySelectorAll(
+        '.active-event-node, .reactivate-target, .event-before-node, .event-after-node'
+      )
+      .forEach(el => {
+        el.classList.remove(
+          'active-event-node',
+          'reactivate-target',
+          'event-before-node',
+          'event-after-node'
+        );
+      });
+
+    memoryList
+      .querySelectorAll(
+        '.event-source, .event-target, .event-after-memory, .motion-destination-store'
+      )
+      .forEach(el => {
+        el.classList.remove(
+          'event-source',
+          'event-target',
+          'event-after-memory',
+          'motion-destination-store'
+        );
+      });
+
+    svg
+      .querySelectorAll('.motion-destination-reactivate')
+      .forEach(el => {
+        el.classList.remove('motion-destination-reactivate');
+      });
+
+    document
+      .querySelectorAll('.motion-path-layer')
+      .forEach(el => el.remove());
+  }
+
+
+  function activeNodeElement(nodePath) {
+    if (!nodePath) return null;
+
+    return svg.querySelector(
+      `[data-node-id="${nodePath}"]`
+    );
+  }
+
+
+  function memoryCardElement(storedId) {
+    return memoryList.querySelector(
+      `[data-stored-id="${storedId}"]`
+    );
+  }
+
+
+  function centerOf(element, fallbackElement) {
+    const target =
+      element || fallbackElement;
+
+    const rect =
+      target.getBoundingClientRect();
+
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  }
+
+
+  function createMotionPath(start, end, eventType) {
+    const layer = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'svg'
+    );
+
+    layer.setAttribute('class', 'motion-path-layer');
+    layer.setAttribute('viewBox', `0 0 ${window.innerWidth} ${window.innerHeight}`);
+
+    const path = document.createElementNS(
+      'http://www.w3.org/2000/svg',
+      'path'
+    );
+
+    const dx = end.x - start.x;
+    const curve = Math.max(65, Math.min(180, Math.abs(dx) * .22));
+
+    path.setAttribute(
+      'd',
+      `M ${start.x} ${start.y}
+       C ${start.x + (dx >= 0 ? curve : -curve)} ${start.y},
+         ${end.x - (dx >= 0 ? curve : -curve)} ${end.y},
+         ${end.x} ${end.y}`
+    );
+
+    path.setAttribute(
+      'class',
+      `motion-path ${eventType === 'REACTIVATE' ? 'reactivate' : 'store'}`
+    );
+
+    layer.appendChild(path);
+    document.body.appendChild(layer);
+
+    return layer;
+  }
+
+
+  function createAnimatedActionOverlay(
+    subtree,
+    start,
+    end,
+    eventType,
+    destinationElement=null,
+    customLabel=null
+  ) {
+    const isReactivate =
+      eventType === 'REACTIVATE';
+
+    const isStore =
+      eventType === 'PRUNE_STORE';
+
+    const overlay =
+      document.createElement('div');
+
+    overlay.className =
+      `action-overlay ${isReactivate ? 'reactivate' : isStore ? 'store' : 'prune'}`;
+
+    const label =
+      document.createElement('div');
+
+    label.className =
+      'action-motion-label';
+
+    label.textContent =
+      customLabel
+      || (
+        isReactivate
+          ? 'STORED SUBTREE → ACTIVE TREE'
+          : isStore
+            ? 'CURRENT SUBTREE → MEMORY'
+            : 'PRUNE'
+      );
+
+    const inner =
+      document.createElement('div');
+
+    inner.className =
+      'action-overlay-inner';
+
+    const overlaySvg =
+      document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        'svg'
+      );
+
+    inner.appendChild(overlaySvg);
+    overlay.appendChild(label);
+    overlay.appendChild(inner);
+    document.body.appendChild(overlay);
+
+    renderMiniTree(
+      overlaySvg,
+      subtree
+    );
+
+    const width = 176;
+    const height = 126;
+
+    overlay.style.left =
+      `${start.x - width / 2}px`;
+
+    overlay.style.top =
+      `${start.y - height / 2}px`;
+
+    const pathLayer =
+      createMotionPath(
+        start,
+        end,
+        eventType
+      );
+
+    if (destinationElement) {
+      destinationElement.classList.add(
+        isReactivate
+          ? 'motion-destination-reactivate'
+          : 'motion-destination-store'
+      );
+    }
+
+    actionOverlay =
+      overlay;
+
+    // Start after initial paint so the browser can interpolate.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const dx = end.x - start.x;
+        const dy = end.y - start.y;
+
+        overlay.style.transition =
+          'transform 1.15s cubic-bezier(.22,.78,.18,1), opacity .22s ease 1.05s';
+
+        overlay.style.transform =
+          `translate(${dx}px, ${dy}px) scale(${isStore ? .70 : .78})`;
+
+        overlay.style.opacity =
+          '.18';
+      });
+    });
+
+    let cleaned = false;
+
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+
+      pathLayer.remove();
+
+      if (destinationElement) {
+        destinationElement.classList.remove(
+          'motion-destination-reactivate',
+          'motion-destination-store'
+        );
+      }
+
+      overlay.remove();
+
+      if (actionOverlay === overlay) {
+        actionOverlay = null;
+      }
+    };
+
+    overlay.addEventListener(
+      'transitionend',
+      event => {
+        if (event.propertyName === 'transform') {
+          cleanup();
+        }
+      },
+      { once: true }
+    );
+
+    // Safety cleanup if transitionend does not fire.
+    window.setTimeout(
+      cleanup,
+      1500
+    );
+  }
+
+
+  function findTreeNodeById(root, nodeId) {
+    if (!root || !nodeId) return null;
+
+    if (String(root.id) === String(nodeId)) {
+      return root;
+    }
+
+    const children =
+      Array.isArray(root.children)
+        ? root.children
+        : [];
+
+    for (const child of children) {
+      const found =
+        findTreeNodeById(
+          child,
+          nodeId
+        );
+
+      if (found) return found;
+    }
+
+    return null;
+  }
+
+
+  function newlyAdmittedMemoryEntry(event) {
+    const before =
+      Array.isArray(event.memoryBefore)
+        ? event.memoryBefore
+        : [];
+
+    const after =
+      Array.isArray(event.memoryAfter)
+        ? event.memoryAfter
+        : [];
+
+    const beforeIds =
+      new Set(
+        before.map(entry => String(entry.id))
+      );
+
+    const added =
+      after.filter(
+        entry =>
+          !beforeIds.has(String(entry.id))
+      );
+
+    if (added.length === 0) {
+      return null;
+    }
+
+    /*
+     * A reactivation event can also trigger capacity replacement or cleanup.
+     * Prefer the newly added entry whose storage time equals this event.
+     * This corresponds to the current pruning candidate Ct being admitted.
+     */
+    return (
+      added.find(
+        entry =>
+          Number(entry.storedAt)
+          === Number(event.instance)
+      )
+      || added[0]
+    );
+  }
+
+
+  function renderEventStageForFrame(frame) {
+    const eventTextEl = document.getElementById('eventText');
+
+    if (!eventTextEl) return;
+
+    if (
+      !frame.event
+      || frame.kind === 'SNAPSHOT'
+    ) {
+      eventTextEl.textContent = 'snapshot';
+      return;
+    }
+
+    const stageNames = {
+      EVENT_BEFORE: 'before event',
+      EVENT_ACTION: 'action',
+      EVENT_AFTER: 'result'
+    };
+
+    eventTextEl.textContent =
+      stageNames[frame.kind] || 'event';
+  }
+
+
+
+  function renderEventHighlights(frame) {
+    if (
+      !frame.event
+      || frame.kind === 'SNAPSHOT'
+    ) {
+      return;
+    }
+
+    const event =
+      frame.event;
+
+    const activeNode =
+      activeNodeElement(
+        event.nodePath
+      );
+
+    const memoryCard =
+      memoryCardElement(
+        event.storedId
+      );
+
+
+    if (
+      frame.kind === 'EVENT_BEFORE'
+    ) {
+
+      /*
+       * Highlight the active subtree that is about to be
+       * pruned/replaced.
+       */
+      if (activeNode) {
+        // Ct is the current pruning candidate, so it stays yellow
+        // even when a historical replacement will be reactivated.
+        activeNode.classList.add(
+          'event-before-node'
+        );
+      }
+
+      /*
+       * For reactivation, also show the historical source
+       * subtree in memory.
+       */
+      if (
+        event.type === 'REACTIVATE'
+        && memoryCard
+      ) {
+
+        memoryCard.classList.add(
+          'event-source'
+        );
+      }
+
+      return;
+    }
+
+
+    if (
+      frame.kind === 'EVENT_ACTION'
+    ) {
+
+      if (
+        event.type === 'REACTIVATE'
+      ) {
+
+        if (activeNode) {
+          // Yellow = Ct, the active subtree being replaced.
+          activeNode.classList.add(
+            'active-event-node'
+          );
+        }
+
+        if (memoryCard) {
+          // Cyan = selected historical M*.
+          memoryCard.classList.add(
+            'event-source'
+          );
+        }
+
+      } else {
+
+        if (activeNode) {
+          activeNode.classList.add(
+            'active-event-node'
+          );
+        }
+      }
+
+      return;
+    }
+
+
+    if (
+      frame.kind === 'EVENT_AFTER'
+    ) {
+
+      /*
+       * The same nodePath now points at the replacement
+       * inserted by the event. Highlight it so the user
+       * can immediately compare before vs after.
+       */
+      if (activeNode) {
+        activeNode.classList.add(
+          'event-after-node'
+        );
+      }
+
+      /*
+       * PRUNE_STORE creates a new memory entry.
+       * Highlight that new stored card in the AFTER frame.
+       */
+      if (
+        event.type === 'PRUNE_STORE'
+        && memoryCard
+      ) {
+
+        memoryCard.classList.add(
+          'event-after-memory'
+        );
+      }
+    }
+  }
+
+
+  function renderActionFrame(frame) {
+    if (
+      frame.kind !== 'EVENT_ACTION'
+      || !frame.event
+    ) {
+      return;
+    }
+
+    const event =
+      frame.event;
+
+    const activeTarget =
+      activeNodeElement(
+        event.nodePath
+      );
+
+    const storedSource =
+      memoryCardElement(
+        event.storedId
+      );
+
+    const currentCandidate =
+      findTreeNodeById(
+        event.treeBefore,
+        event.nodePath
+      );
+
+
+    /*
+     * REACTIVATE
+     *
+     * Methodology:
+     *   1) Ct is the current pruning candidate in the active tree.
+     *   2) An older historical M* is selected from memory.
+     *   3) M* replaces Ct at exactly Ct's structural position.
+     *   4) Independently, Ct is considered for historical-memory admission.
+     *
+     * Therefore, when Ct is actually admitted, show a true two-way swap:
+     *
+     *        current Ct  --->  Historical Memory
+     *        stored M*   --->  Ct's active-tree position
+     */
+    if (event.type === 'REACTIVATE') {
+
+      if (activeTarget) {
+        activeTarget.classList.add(
+          'active-event-node'
+        );
+      }
+
+      if (storedSource) {
+        storedSource.classList.add(
+          'event-source'
+        );
+
+        storedSource.scrollIntoView({
+          block: 'nearest',
+          behavior: 'smooth'
+        });
+      }
+
+      const activeCenter =
+        centerOf(
+          activeTarget,
+          treeViewport
+        );
+
+      const memoryCenter =
+        centerOf(
+          storedSource,
+          memoryList
+        );
+
+
+      /*
+       * Historical M* -> active position of Ct.
+       * event.subtree is the preserved historical structure selected
+       * for successful reactivation.
+       */
+      createAnimatedActionOverlay(
+        event.subtree,
+        memoryCenter,
+        activeCenter,
+        'REACTIVATE',
+        activeTarget,
+        `STORED #${event.storedId} → ACTIVE TREE`
+      );
+
+
+      /*
+       * Ct -> memory only if the event data confirms that the current
+       * pruning candidate was actually admitted after the operation.
+       *
+       * This matters because methodology says "consider for admission",
+       * not "always store".
+       */
+      const admittedEntry =
+        newlyAdmittedMemoryEntry(
+          event
+        );
+
+      if (
+        admittedEntry
+        && currentCandidate
+      ) {
+
+        const memoryRect =
+          memoryList.getBoundingClientRect();
+
+        const storeDestination = {
+          x:
+            memoryRect.left
+            + memoryRect.width * .50,
+
+          y:
+            memoryRect.top
+            + Math.min(
+              120,
+              memoryRect.height * .22
+            )
+        };
+
+        window.setTimeout(
+          () => {
+            createAnimatedActionOverlay(
+              currentCandidate,
+              activeCenter,
+              storeDestination,
+              'PRUNE_STORE',
+              memoryList,
+              `CURRENT SUBTREE → MEMORY #${admittedEntry.id}`
+            );
+          },
+          90
+        );
+      }
+
+      return;
+    }
+
+
+    /*
+     * PRUNE_STORE
+     *
+     * No historical replacement is involved here. The active candidate Ct
+     * is removed and admitted to memory; the active position is handled by
+     * the recorded after-state (normally a new learning leaf).
+     */
+    if (activeTarget) {
+      activeTarget.classList.add(
+        'active-event-node'
+      );
+    }
+
+    if (event.type === 'PRUNE_STORE') {
+
+      const start =
+        centerOf(
+          activeTarget,
+          treeViewport
+        );
+
+      const memoryRect =
+        memoryList.getBoundingClientRect();
+
+      const end = {
+        x:
+          memoryRect.left
+          + memoryRect.width / 2,
+
+        y:
+          memoryRect.top
+          + Math.min(
+            105,
+            memoryRect.height * .20
+          )
+      };
+
+      createAnimatedActionOverlay(
+        currentCandidate || event.subtree,
+        start,
+        end,
+        'PRUNE_STORE',
+        memoryList,
+        `CURRENT SUBTREE → MEMORY #${event.storedId}`
+      );
+
+      return;
+    }
+
+
+    /*
+     * Plain PRUNE
+     *
+     * Candidate is removed but not admitted to historical memory.
+     */
+    const start =
+      centerOf(
+        activeTarget,
+        treeViewport
+      );
+
+    createAnimatedActionOverlay(
+      currentCandidate || event.subtree,
+      start,
+      {
+        x: start.x + 120,
+        y: start.y
+      },
+      event.type,
+      null,
+      'SUBTREE PRUNED · NOT STORED'
+    );
+  }
+
+
+  function renderEventMarkers() {
+    eventMarkers.innerHTML = '';
+
+    if (
+      events.length === 0
+    ) {
+      eventDataStatus.textContent =
+        '· V3 event data not found';
+      return;
+    }
+
+    eventDataStatus.textContent =
+      `${events.length} events · ${frames.length} frames`;
+
+    const maxIndex =
+      Math.max(
+        1,
+        frames.length - 1
+      );
+
+    frames.forEach(
+      (frame, frameIndex) => {
+
+        if (
+          frame.kind !== 'EVENT_ACTION'
+        ) {
+          return;
+        }
+
+        const marker =
+          document.createElement(
+            'button'
+          );
+
+        marker.className =
+          `event-marker ${eventClass(frame.event)}`;
+
+        marker.style.left =
+          `${(frameIndex / maxIndex) * 100}%`;
+
+        marker.title =
+          `${eventLabel(frame.event)} @ ${frame.event.instance} · click to view action`;
+
+        marker.onclick =
+          () => {
+            stop();
+            render(
+              frameIndex
+            );
+          };
+
+        eventMarkers.appendChild(
+          marker
+        );
+      }
+    );
+  }
+
+
+  function svgEl(name, attrs={}) {
+    const element =
+      document.createElementNS(
+        'http://www.w3.org/2000/svg',
+        name
+      );
+
+    Object.entries(attrs)
+      .forEach(
+        ([key, value]) =>
+          element.setAttribute(
+            key,
+            value
+          )
+      );
+
+    return element;
+  }
+
+
+  function renderAccuracyChart(currentInstance) {
+    accuracyChart.innerHTML = '';
+
+    const points =
+      snapshots.filter(
+        frame =>
+          frame.accuracy != null
+          || frame.windowAccuracy != null
+      );
+
+    if (points.length === 0) {
+      const text =
+        svgEl(
+          'text',
+          {
+            x: 20,
+            y: 35,
+            class: 'chart-label'
+          }
+        );
+
+      text.textContent =
+        'Accuracy data not available for this stream.';
+
+      accuracyChart.appendChild(
+        text
+      );
+
+      return;
+    }
+
+
+    const W = 900;
+    const H = 220;
+    const margin = {
+      left: 45,
+      right: 18,
+      top: 16,
+      bottom: 30
+    };
+
+    const minX =
+      Number(
+        snapshots[0].instance
+      );
+
+    const maxX =
+      Number(
+        snapshots[
+          snapshots.length - 1
+        ].instance
+      );
+
+    
+    const values =
+      points.flatMap(
+        p => [
+          p.accuracy,
+          p.windowAccuracy
+        ]
+      ).filter(
+        v => v != null
+      );
+
+    let minY =
+      Math.min(
+        0.70,
+        ...values
+      );
+
+    let maxY =
+      Math.max(
+        0.95,
+        ...values
+      );
+
+    minY =
+      Math.max(
+        0,
+        minY - 0.02
+      );
+
+    maxY =
+      Math.min(
+        1,
+        maxY + 0.02
+      );
+
+
+    const x =
+      value =>
+        margin.left
+        + (
+          (
+            Number(value)
+            - minX
+          )
+          / Math.max(
+            1,
+            maxX - minX
+          )
+        )
+        * (
+          W
+          - margin.left
+          - margin.right
+        );
+
+
+    const y =
+      value =>
+        margin.top
+        + (
+          (
+            maxY
+            - Number(value)
+          )
+          / Math.max(
+            0.0001,
+            maxY - minY
+          )
+        )
+        * (
+          H
+          - margin.top
+          - margin.bottom
+        );
+
+
+    accuracyChart.setAttribute(
+      'viewBox',
+      `0 0 ${W} ${H}`
+    );
+
+
+    for (
+      let i = 0;
+      i <= 4;
+      i++
+    ) {
+      const value =
+        minY
+        + (
+          maxY - minY
+        ) * i / 4;
+
+      const yy =
+        y(value);
+
+      accuracyChart.appendChild(
+        svgEl(
+          'line',
+          {
+            x1: margin.left,
+            x2: W - margin.right,
+            y1: yy,
+            y2: yy,
+            class: 'chart-grid'
+          }
+        )
+      );
+
+      const label =
+        svgEl(
+          'text',
+          {
+            x: margin.left - 7,
+            y: yy + 3,
+            'text-anchor': 'end',
+            class: 'chart-label'
+          }
+        );
+
+      label.textContent =
+        `${(value * 100).toFixed(0)}%`;
+
+      accuracyChart.appendChild(
+        label
+      );
+    }
+
+
+    
+    const phaseBoundaries =
+      (() => {
+        const boundaries = [];
+        let previousPhase = null;
+
+        snapshots.forEach(
+          frame => {
+            const phase =
+              frame.phase == null
+                ? null
+                : String(frame.phase).trim();
+
+            if (
+              !phase
+              || phase.toLowerCase() === 'unknown'
+            ) {
+              return;
+            }
+
+            if (
+              previousPhase === null
+              || phase !== previousPhase
+            ) {
+              boundaries.push({
+                instance: Number(frame.instance),
+                phase
+              });
+
+              previousPhase =
+                phase;
+            }
+          }
+        );
+
+        return boundaries;
+      })();
+
+
+    const showPhaseLabels =
+      phaseBoundaries.length > 1
+      || (
+        phaseBoundaries.length === 1
+        && !['stream', 'data', 'dataset']
+          .includes(
+            phaseBoundaries[0]
+              .phase
+              .toLowerCase()
+          )
+      );
+
+
+    phaseBoundaries.forEach(
+      boundary => {
+        const xx =
+          x(
+            boundary.instance
+          );
+
+        accuracyChart.appendChild(
+          svgEl(
+            'line',
+            {
+              x1: xx,
+              x2: xx,
+              y1: margin.top,
+              y2: H - margin.bottom,
+              class: 'chart-grid'
+            }
+          )
+        );
+
+        if (
+          showPhaseLabels
+        ) {
+          const label =
+            svgEl(
+              'text',
+              {
+                x: xx + 4,
+                y: H - 10,
+                class: 'chart-label'
+              }
+            );
+
+          label.textContent =
+            boundary.phase;
+
+          accuracyChart.appendChild(
+            label
+          );
+        }
+      }
+    );
+
+
+    
+    events.forEach(
+      event => {
+        const xx =
+          x(
+            event.instance
+          );
+
+        accuracyChart.appendChild(
+          svgEl(
+            'line',
+            {
+              x1: xx,
+              x2: xx,
+              y1: margin.top,
+              y2: H - margin.bottom,
+              class:
+                event.type === 'REACTIVATE'
+                  ? 'chart-reactivation'
+                  : 'chart-event'
+            }
+          )
+        );
+      }
+    );
+
+
+    function linePath(
+      dataKey
+    ) {
+      const usable =
+        points.filter(
+          p =>
+            p[dataKey] != null
+        );
+
+      return usable
+        .map(
+          (p, i) =>
+            `${i === 0 ? 'M' : 'L'} ${x(p.instance)} ${y(p[dataKey])}`
+        )
+        .join(' ');
+    }
+
+
+    const totalPath =
+      svgEl(
+        'path',
+        {
+          d: linePath(
+            'accuracy'
+          ),
+          class: 'chart-line-total'
+        }
+      );
+
+    accuracyChart.appendChild(
+      totalPath
+    );
+
+
+    const windowPath =
+      svgEl(
+        'path',
+        {
+          d: linePath(
+            'windowAccuracy'
+          ),
+          class: 'chart-line-window'
+        }
+      );
+
+    accuracyChart.appendChild(
+      windowPath
+    );
+
+
+    const cursorX =
+      x(
+        Math.max(
+          minX,
+          Math.min(
+            maxX,
+            Number(currentInstance)
+          )
+        )
+      );
+
+    accuracyChart.appendChild(
+      svgEl(
+        'line',
+        {
+          x1: cursorX,
+          x2: cursorX,
+          y1: margin.top,
+          y2: H - margin.bottom,
+          class: 'chart-cursor'
+        }
+      )
+    );
+  }
+
+
+  function formatMetric(
+    value,
+    digits=3
+  ) {
+    if (
+      value == null
+      || Number.isNaN(
+        Number(value)
+      )
+    ) {
+      return '–';
+    }
+
+    return Number(value)
+      .toFixed(
+        digits
+      );
+  }
+
+
+  function renderDiagnostics(frame) {
+    if (
+      !frame.event
+    ) {
+      diagnosticPanel.innerHTML =
+        `<div class="diag-title">Snapshot ${frame.instance}</div>` +
+        `<div class="diag-empty">Move to an event frame to inspect pruning or reactivation diagnostics. ` +
+        `Accuracy is shown in the chart on the left.</div>`;
+
+      return;
+    }
+
+
+    const event =
+      frame.event;
+
+
+    if (
+      event.type !== 'REACTIVATE'
+    ) {
+      diagnosticPanel.innerHTML =
+        `<div class="diag-title">${eventLabel(event)}</div>` +
+        `<div class="diag-grid">` +
+        `<span>Exact instance</span><strong>${event.instance}</strong>` +
+        `<span>Phase</span><strong>${displayPhase(event.phase)}</strong>` +
+        `<span>Active-tree path</span><strong>${event.nodePath ?? '–'}</strong>` +
+        `<span>Stage</span><strong>${frame.kind === 'EVENT_AFTER' ? 'RESULT' : frame.kind.replace('EVENT_', '')}</strong>` +
+        `</div>`;
+
+      return;
+    }
+
+
+    const recovered =
+      event.performanceRecovered === true;
+
+    const inactive =
+      event.storedWasInactive === true;
+
+
+    diagnosticPanel.innerHTML =
+      `<div class="diag-title">REACTIVATE #${event.storedId}</div>` +
+      `<div class="diag-grid">` +
+
+      `<span>Stored phase</span>` +
+      `<strong>${event.storedPhase ?? '–'}</strong>` +
+
+      `<span>Stored at</span>` +
+      `<strong>${event.storedAt ?? '–'}</strong>` +
+
+      `<span>Reactivated phase</span>` +
+      `<strong>${displayPhase(event.phase)}</strong>` +
+
+      `<span>Reactivated at</span>` +
+      `<strong>${event.instance}</strong>` +
+
+      `<span>Structural similarity</span>` +
+      `<strong>${formatMetric(event.similarity, 4)}</strong>` +
+
+      `<span>Class similarity</span>` +
+      `<strong>${formatMetric(event.classSimilarity, 4)}</strong>` +
+
+      `<span>Recent stored accuracy</span>` +
+      `<strong>${event.storedRecentAccuracy == null ? '–' : (event.storedRecentAccuracy * 100).toFixed(1) + '%'}</strong>` +
+
+      `<span>Best recent accuracy</span>` +
+      `<strong>${event.storedBestRecentAccuracy == null ? '–' : (event.storedBestRecentAccuracy * 100).toFixed(1) + '%'}</strong>` +
+
+      `<span>Was inactive</span>` +
+      `<strong class="${inactive ? 'status-yes' : 'status-no'}">${inactive ? 'YES' : 'NO'}</strong>` +
+
+      `<span>Performance recovered</span>` +
+      `<strong class="${recovered ? 'status-yes' : 'status-no'}">${recovered ? 'YES' : 'NO'}</strong>` +
+
+      `<span>Target path</span>` +
+      `<strong>${event.nodePath ?? '–'}</strong>` +
+
+      `<span>Visual stage</span>` +
+      `<strong>${frame.kind.replace('EVENT_', '')}</strong>` +
+
+      `</div>`;
+  }
+
+
+  function countVisibleNodes(root) {
+    if (!root) return 0;
+
+    let count = 1;
+
+    if (Array.isArray(root.children)) {
+      root.children.forEach(child => {
+        if (child) count += countVisibleNodes(child);
+      });
+    }
+
+    return count;
+  }
+
+
+  function getLastReactivationUpTo(frameIndex) {
+    let previous = 0;
+    let last = null;
+
+    for (let i = 0; i <= frameIndex; i++) {
+      const current = Number(frames[i].reactivated || 0);
+
+      if (current > previous) {
+        last = {
+          instance: frames[i].instance,
+          phase: frames[i].phase,
+          count: current
+        };
+      }
+
+      previous = current;
+    }
+
+    return last;
+  }
+
+
+  function render(i) {
+    clearActionOverlay();
+
+    index =
+      Math.max(
+        0,
+        Math.min(
+          frames.length - 1,
+          i
+        )
+      );
+
+    const f =
+      frames[index];
+
+    experimentText.textContent =
+      data.experiment
+      || 'stream';
+
+    document.getElementById('instanceText').textContent =
+      f.instance;
+
+    document.getElementById('phaseText').textContent =
+      displayPhase(f.phase);
+
+    document.getElementById('frameText').textContent =
+      `${index + 1}/${frames.length}`;
+
+
+    const lastReact =
+      (() => {
+        let last = null;
+
+        for (
+          let j = 0;
+          j <= index;
+          j++
+        ) {
+          const tf =
+            frames[j];
+
+          if (
+            tf.event
+            && tf.event.type === 'REACTIVATE'
+            && (
+              tf.kind === 'EVENT_ACTION'
+              || tf.kind === 'EVENT_AFTER'
+            )
+          ) {
+            last = {
+              instance: tf.event.instance,
+              phase: tf.event.phase
+            };
+          }
+        }
+
+        return last;
+      })();
+
+
+    document.getElementById('lastReactText').textContent =
+      lastReact
+        ? `${lastReact.instance} (${lastReact.phase})`
+        : 'none';
+
+
+    const frameKindLabels = {
+      SNAPSHOT: 'SNAPSHOT',
+      EVENT_BEFORE: 'BEFORE',
+      EVENT_ACTION: 'ACTION',
+      EVENT_AFTER: 'RESULT'
+    };
+
+    frameKindText.textContent =
+      frameKindLabels[f.kind]
+      || f.kind;
+
+    frameKindBadge.className =
+      'badge frame-kind-badge ' +
+      (
+        f.kind === 'EVENT_BEFORE'
+          ? 'event-before'
+          : f.kind === 'EVENT_ACTION'
+            ? 'event-action'
+            : f.kind === 'EVENT_AFTER'
+              ? 'event-after'
+              : ''
+      );
+
+
+    const visibleNodes =
+      countVisibleNodes(
+        f.tree
+      );
+
+
+    const statsText =
+      document.getElementById('statsText');
+
+    statsText.textContent =
+      `Active nodes: ${visibleNodes}` +
+      ` · Memory: ${f.memory?.length ?? 0}` +
+      (
+        f.pruned == null
+          ? ''
+          : ` · Pruned: ${f.pruned}`
+      ) +
+      (
+        f.reactivated == null
+          ? ''
+          : ` · Reactivated: ${f.reactivated}`
+      );
+
+    statsText.title =
+      'Active nodes counts the nodes currently present in the serialized active tree.';
+
+
+
+    slider.value =
+      index;
+
+    renderTree(
+      f.tree
+    );
+
+    if (
+      f.kind === 'EVENT_AFTER'
+      && f.event
+      && f.event.type === 'PRUNE_STORE'
+      && f.event.nodePath === 'root'
+      && visibleNodes === 1
+    ) {
+      statsText.textContent +=
+        ` · Root subtree stored as #${f.event.storedId}; active tree restarted from a learning leaf`;
+    }
+
+    renderMemory(
+      f.memory
+    );
+
+    renderEventStageForFrame(
+      f
+    );
+
+    renderEventHighlights(
+      f
+    );
+
+    renderAccuracyChart(
+      f.instance
+    );
+
+    renderDiagnostics(
+      f
+    );
+
+    
+    if (
+      f.kind === 'EVENT_ACTION'
+    ) {
+      requestAnimationFrame(
+        () => {
+          if (
+            index === Number(slider.value)
+          ) {
+            renderActionFrame(
+              f
+            );
+          }
+        }
+      );
+    }
+  }
+
+
+  function stop() {
+    if (timer) {
+      clearInterval(
+        timer
+      );
+    }
+
+    timer =
+      null;
+
+    playBtn.textContent =
+      '▶ Play';
+  }
+
+
+  function play() {
+    if (timer) {
+      stop();
+      return;
+    }
+
+    playBtn.textContent =
+      '⏸ Pause';
+
+
+    timer =
+      setInterval(
+        () => {
+
+          if (
+            index >= frames.length - 1
+          ) {
+
+            stop();
+            return;
+          }
+
+
+          render(
+            index + 1
+          );
+        },
+        Number(
+          speedSelect.value
+        )
+      );
+  }
+
+
+  document.getElementById('prevBtn').onclick =
+    () => {
+      stop();
+      render(
+        index - 1
+      );
+    };
+
+
+  document.getElementById('nextBtn').onclick =
+    () => {
+      stop();
+      render(
+        index + 1
+      );
+    };
+
+
+  playBtn.onclick =
+    play;
+
+
+  slider.oninput =
+    e => {
+      stop();
+
+      render(
+        Number(
+          e.target.value
+        )
+      );
+    };
+
+
+  speedSelect.onchange =
+    () => {
+      if (timer) {
+        stop();
+        play();
+      }
+    };
+
+  renderEventMarkers();
+  render(0);
+}
+
+bootstrapMemoryHTVisualizer();
+</script>
+</body>
+</html>
