@@ -58,12 +58,5 @@ window.MEMORY_HT_EXPERIMENTS = [
     category: "Real-world datasets",
     file: "data/ELECTRICITY.js",
     default: false
-  },
-  {
-    id: "AIRLINES",
-    label: "Airlines",
-    category: "Real-world datasets",
-    file: "data/AIRLINES.js",
-    default: false
   }
 ];
