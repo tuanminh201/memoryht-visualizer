@@ -1289,6 +1289,184 @@
     }
   }
 
+  /* ========================================================
+     SUMMARY-ONLY DATASET MODE
+     Used for very large streams (e.g. Airlines) when full
+     structural playback data is intentionally not published.
+     ======================================================== */
+  #summaryView {
+    display: none;
+    margin-top: 18px;
+  }
+
+  body.summary-mode #summaryView {
+    display: block;
+  }
+
+  body.summary-mode .grid,
+  body.summary-mode .controls,
+  body.summary-mode .analytics-grid {
+    display: none;
+  }
+
+  .summary-shell {
+    display: grid;
+    gap: 16px;
+  }
+
+  .summary-hero {
+    padding: 22px;
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: linear-gradient(180deg, rgba(122,162,247,.08), rgba(255,255,255,.015));
+  }
+
+  .summary-kicker {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .summary-title {
+    margin: 0;
+    font-size: 24px;
+    line-height: 1.2;
+  }
+
+  .summary-copy {
+    margin: 8px 0 0;
+    color: var(--muted);
+    max-width: 900px;
+    line-height: 1.6;
+  }
+
+  .summary-cards {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .summary-card {
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--panel);
+  }
+
+  .summary-card span {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    margin-bottom: 7px;
+  }
+
+  .summary-card strong {
+    display: block;
+    font-size: 22px;
+    line-height: 1.1;
+  }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr);
+    gap: 16px;
+  }
+
+  .summary-panel {
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    background: var(--panel);
+    overflow: hidden;
+  }
+
+  .summary-panel-head {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
+  }
+
+  .summary-panel-body {
+    padding: 16px;
+  }
+
+  .summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .summary-table th,
+  .summary-table td {
+    padding: 10px 8px;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    text-align: left;
+  }
+
+  .summary-table th {
+    color: var(--muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .summary-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .summary-table .best-result {
+    color: var(--success);
+    font-weight: 700;
+  }
+
+  .summary-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .summary-metric {
+    padding: 12px;
+    border: 1px solid rgba(255,255,255,.07);
+    border-radius: 10px;
+    background: rgba(255,255,255,.02);
+  }
+
+  .summary-metric span {
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    margin-bottom: 5px;
+  }
+
+  .summary-metric strong {
+    font-size: 17px;
+  }
+
+  .summary-note {
+    padding: 13px 14px;
+    border-left: 3px solid var(--memory);
+    background: rgba(187,154,247,.07);
+    color: var(--muted);
+    line-height: 1.55;
+    border-radius: 8px;
+  }
+
+  @media (max-width: 900px) {
+    .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .summary-grid { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 520px) {
+    .summary-cards { grid-template-columns: 1fr; }
+    .summary-metrics { grid-template-columns: 1fr; }
+  }
+
+
 </style>
 </head>
 <body>
@@ -1328,6 +1506,44 @@
         <div class="badge">Playback <strong id="eventText">snapshot</strong></div>
         <div id="frameKindBadge" class="badge frame-kind-badge">Frame kind <strong id="frameKindText">SNAPSHOT</strong></div>
       </div>
+    </div>
+  </div>
+
+  <div id="summaryView" aria-live="polite">
+    <div class="summary-shell">
+      <section class="summary-hero">
+        <div class="summary-kicker">Summary-only dataset view</div>
+        <h2 class="summary-title" id="summaryTitle">Airlines</h2>
+        <p class="summary-copy" id="summaryDescription"></p>
+      </section>
+
+      <div class="summary-cards" id="summaryCards"></div>
+
+      <div class="summary-grid">
+        <section class="summary-panel">
+          <div class="summary-panel-head">Final cumulative accuracy</div>
+          <div class="summary-panel-body">
+            <table class="summary-table">
+              <thead>
+                <tr>
+                  <th>Classifier</th>
+                  <th>Accuracy</th>
+                </tr>
+              </thead>
+              <tbody id="summaryAccuracyRows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="summary-panel">
+          <div class="summary-panel-head">MemoryHT diagnostics</div>
+          <div class="summary-panel-body">
+            <div class="summary-metrics" id="summaryMemoryMetrics"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="summary-note" id="summaryNote"></div>
     </div>
   </div>
 
@@ -1541,6 +1757,135 @@ function normalizeManifest(rawManifest) {
   return [];
 }
 
+
+const BUILT_IN_SUMMARY_EXPERIMENTS = {
+  AIRLINES: {
+    id: "AIRLINES",
+    label: "Airlines — summary",
+    category: "Real-world datasets",
+    summaryOnly: true,
+    summary: {
+      dataset: "Airlines",
+      instances: 539383,
+      attributes: 7,
+      classes: 2,
+      accuracies: [
+        { name: "HT", value: 0.650784 },
+        { name: "MemoryHT-NoReact", value: 0.648294 },
+        { name: "MemoryHT", value: 0.64829444 },
+        { name: "HAT", value: 0.638105 },
+        { name: "EFDT", value: 0.652740 }
+      ],
+      finalWindowAccuracy: 0.66280000,
+      finalActiveNodes: 9330,
+      prunedSubtrees: 276,
+      storedAdmissions: 79,
+      reactivations: 0,
+      finalMemorySize: 20,
+      memoryCapacity: 20,
+      finalStoredNodes: 4960,
+      reactivationHitRate: null,
+      note:
+        "Full active-tree and historical-memory playback is omitted for Airlines because the serialized structural visualization payload is very large. " +
+        "The complete 539,383-instance stream was still evaluated. In this delayed leaf-based run, 276 subtrees were pruned, 79 were admitted to historical memory, and no historical subtree passed the reactivation gate."
+    }
+  }
+};
+
+function withBuiltInSummaryExperiments(experiments) {
+  const result = Array.isArray(experiments) ? experiments.map(x => ({...x})) : [];
+
+  Object.values(BUILT_IN_SUMMARY_EXPERIMENTS).forEach(summaryExperiment => {
+    const existingIndex = result.findIndex(
+      item => String(item.id).toUpperCase() === String(summaryExperiment.id).toUpperCase()
+    );
+
+    if (existingIndex >= 0) {
+      // Force summary-only mode even if a manifest still points to the
+      // heavyweight AIRLINES.js file that is intentionally not published.
+      result[existingIndex] = {
+        ...result[existingIndex],
+        ...summaryExperiment
+      };
+    } else {
+      result.push(summaryExperiment);
+    }
+  });
+
+  return result;
+}
+
+function formatInteger(value) {
+  return Number(value).toLocaleString("en-US");
+}
+
+function formatPercent(value, digits = 2) {
+  return `${(Number(value) * 100).toFixed(digits)}%`;
+}
+
+function showSummaryExperiment(experiment) {
+  const summary = experiment && experiment.summary;
+  if (!summary) {
+    throw new Error(`Summary data missing for experiment "${experiment && experiment.id}".`);
+  }
+
+  document.body.classList.add("summary-mode");
+
+  const title = document.getElementById("summaryTitle");
+  const description = document.getElementById("summaryDescription");
+  const cards = document.getElementById("summaryCards");
+  const rows = document.getElementById("summaryAccuracyRows");
+  const metrics = document.getElementById("summaryMemoryMetrics");
+  const note = document.getElementById("summaryNote");
+
+  title.textContent = summary.dataset;
+  description.textContent =
+    `${formatInteger(summary.instances)} temporally ordered instances · ` +
+    `${summary.attributes} input attributes · ${summary.classes} classes. ` +
+    `The compact view reports the completed evaluation without loading the full structural playback payload.`;
+
+  cards.innerHTML = [
+    ["Instances", formatInteger(summary.instances)],
+    ["MemoryHT accuracy", formatPercent(summary.accuracies.find(x => x.name === "MemoryHT").value)],
+    ["Reactivations", formatInteger(summary.reactivations)],
+    ["Final memory", `${summary.finalMemorySize} / ${summary.memoryCapacity}`]
+  ].map(([label, value]) =>
+    `<div class="summary-card"><span>${label}</span><strong>${value}</strong></div>`
+  ).join("");
+
+  const bestAccuracy = Math.max(...summary.accuracies.map(x => x.value));
+  rows.innerHTML = summary.accuracies.map(item => {
+    const bestClass = item.value === bestAccuracy ? "best-result" : "";
+    return `<tr><td>${item.name}</td><td class="${bestClass}">${formatPercent(item.value)}</td></tr>`;
+  }).join("");
+
+  const metricItems = [
+    ["Pruned subtrees", formatInteger(summary.prunedSubtrees)],
+    ["Stored admissions", formatInteger(summary.storedAdmissions)],
+    ["Successful reactivations", formatInteger(summary.reactivations)],
+    ["Final memory occupancy", `${summary.finalMemorySize} / ${summary.memoryCapacity}`],
+    ["Final stored nodes", formatInteger(summary.finalStoredNodes)],
+    ["Final active-tree nodes", formatInteger(summary.finalActiveNodes)],
+    ["Final 5k window accuracy", formatPercent(summary.finalWindowAccuracy)],
+    ["Reactivation hit rate", summary.reactivationHitRate == null ? "N/A — no reactivation" : formatPercent(summary.reactivationHitRate, 3)]
+  ];
+
+  metrics.innerHTML = metricItems.map(([label, value]) =>
+    `<div class="summary-metric"><span>${label}</span><strong>${value}</strong></div>`
+  ).join("");
+
+  note.textContent = summary.note;
+
+  // Keep the top metadata bar meaningful in summary mode.
+  document.getElementById("experimentText").textContent = summary.dataset;
+  document.getElementById("instanceText").textContent = formatInteger(summary.instances);
+  document.getElementById("phaseText").textContent = "real-world";
+  document.getElementById("frameText").textContent = "summary";
+  document.getElementById("lastReactText").textContent = "none";
+  document.getElementById("eventText").textContent = "summary only";
+  document.getElementById("frameKindText").textContent = "SUMMARY";
+}
+
 function chooseExperiment(experiments) {
   const params = new URLSearchParams(window.location.search);
   const requestedId = params.get("experiment");
@@ -1600,9 +1945,11 @@ function configureExperimentSelector(experiments, selectedExperiment) {
 
   selector.disabled = experiments.length <= 1;
   status.textContent =
-    selectedExperiment && selectedExperiment.file
-      ? selectedExperiment.file
-      : "";
+    selectedExperiment && selectedExperiment.summaryOnly
+      ? "summary only · no large data file"
+      : selectedExperiment && selectedExperiment.file
+        ? selectedExperiment.file
+        : "";
 
   selector.addEventListener("change", () => {
     const nextUrl = new URL(window.location.href);
@@ -1612,12 +1959,19 @@ function configureExperimentSelector(experiments, selectedExperiment) {
 }
 
 async function bootstrapMemoryHTVisualizer() {
-  const experiments = normalizeManifest(window.MEMORY_HT_EXPERIMENTS);
+  const experiments = withBuiltInSummaryExperiments(
+    normalizeManifest(window.MEMORY_HT_EXPERIMENTS)
+  );
   const selectedExperiment = chooseExperiment(experiments);
 
   configureExperimentSelector(experiments, selectedExperiment);
 
   try {
+    if (selectedExperiment && selectedExperiment.summaryOnly) {
+      showSummaryExperiment(selectedExperiment);
+      return;
+    }
+
     if (selectedExperiment) {
       if (!selectedExperiment.file) {
         throw new Error(
