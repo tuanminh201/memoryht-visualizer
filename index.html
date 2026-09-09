@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MemoryHoeffdingTree Visualizer</title>
+<title>MemoryHT Visualizer — Delayed Leaf-Based Reactivation</title>
 <style>
   :root {
     --bg: #0f1115;
@@ -1297,10 +1297,10 @@
     <div class="hero-row">
       <div>
         <div class="brand-kicker">Interactive research demo</div>
-        <div class="title">MemoryHoeffdingTree</div>
+        <div class="title">MemoryHT</div>
         <div class="subtitle">
-          Explore how the active Hoeffding Tree changes over time, which pruned subtrees are retained in memory,
-          and when previously stored structures are reactivated.
+          Explore delayed leaf-based subtree reactivation: pruned subtrees are retained in historical memory,
+          fresh learning leaves collect local evidence, and reuse occurs only when a historical subtree shows sufficient predictive advantage.
         </div>
       </div>
 
@@ -1351,7 +1351,7 @@
       <div class="panel-title">
         <div class="panel-title-main">
           <span>Historical Subtree Memory</span>
-          <small>Retained pruned subtrees available for reuse</small>
+          <small>Retained pruned subtrees available for later local-evidence evaluation</small>
         </div>
         <div class="memory-header-tools">
           <input id="memoryFilter" class="memory-filter" type="search" placeholder="Filter memory…" aria-label="Filter stored subtrees" />
@@ -1400,7 +1400,7 @@
         <svg id="accuracyChart"></svg>
         <div class="chart-legend">
           <span><i class="line-sample" style="background:#7aa2f7"></i>Cumulative accuracy</span>
-          <span><i class="line-sample" style="background:#56cfe1"></i>Window accuracy (1000)</span>
+          <span><i class="line-sample" style="background:#56cfe1"></i>Window accuracy (5000)</span>
           <span><i class="line-sample" style="background:#56cfe1"></i>Reactivation</span>
           <span><i class="line-sample" style="background:#f1f3f5"></i>Current timeline position</span>
         </div>
@@ -1408,7 +1408,7 @@
     </section>
 
     <section class="panel">
-      <div class="panel-title"><div class="panel-title-main"><span>Event Diagnostics</span><small>Details for pruning, storage, and reactivation decisions</small></div></div>
+      <div class="panel-title"><div class="panel-title-main"><span>Event Diagnostics</span><small>Pruning, local evidence, and delayed-reactivation decisions</small></div></div>
       <div class="analytics-body">
         <div id="diagnosticPanel" class="diagnostic-card"></div>
 
@@ -1417,7 +1417,7 @@
   </div>
 
   <footer class="footer">
-    <span>MemoryHoeffdingTree · interactive thesis companion</span>
+    <span>MemoryHT · delayed leaf-based reactivation · interactive thesis companion</span>
     <span>Tip: use the timeline markers to jump directly to structural events.</span>
   </footer>
 </div>
@@ -1436,22 +1436,27 @@
         while the memory panel shows subtrees that were pruned and retained for possible later reuse.
       </p>
       <p>
-        Event frames follow the pruning workflow used by MemoryHoeffdingTree. Yellow marks the active subtree that is about to be replaced. During successful reactivation, the selected stored subtree moves from memory to exactly that position in the active tree. If the replaced subtree is admitted to historical memory, it simultaneously moves in the opposite direction; otherwise it is not shown as stored.
-        Purple indicates a subtree that is retained in historical memory; yellow is a temporary event highlight for the
-        subtree or node currently involved in pruning or matching; cyan indicates that a stored subtree has been
-        successfully reactivated into the active tree. Hover over tree nodes for node-level details and use the memory
-        filter when many stored subtrees are present.
+        Event frames follow the final delayed leaf-based MemoryHT workflow. When a subtree <strong>C<sub>t</sub></strong> is pruned,
+        the same tree position is replaced by a fresh learning leaf <strong>L</strong>. The leaf then collects only the local instances
+        that reach that position. Historical subtrees are evaluated later on this same local evidence.
+      </p>
+      <p>
+        Purple indicates a subtree retained in historical memory. Yellow highlights the active pruning target or the fresh
+        learning leaf currently being evaluated. Cyan indicates a successful reactivation: the selected historical subtree
+        <strong>M*</strong> moves from memory to the exact position of <strong>L</strong>. There is no immediate similarity-based replacement
+        at pruning time, and the fresh leaf is not stored when it is replaced by <strong>M*</strong>.
       </p>
       <p style="color:var(--muted);font-size:11px">
-        Thesis notation: the subtree being replaced corresponds to <strong>C<sub>t</sub></strong>,
-        while the stored subtree selected for reactivation corresponds to <strong>M*</strong>.
+        Reactivation gate: <strong>A(M*, E<sub>L</sub>) − A(L, E<sub>L</sub>) ≥ ε</strong>, with
+        <strong>W = 1000</strong>, <strong>N<sub>min</sub> = 200</strong>, check interval <strong>50</strong>, and <strong>ε = 0.02</strong>.
+        Structural and class-distribution similarity are not reactivation criteria.
       </p>
       <div class="about-legend">
         <div><span class="tree-legend-dot" style="background:var(--split);margin-right:7px"></span><strong>Blue</strong> — active split node</div>
         <div><span class="tree-legend-dot" style="background:var(--leaf);margin-right:7px"></span><strong>Green</strong> — active leaf node</div>
         <div><span class="tree-legend-dot" style="background:var(--memory);margin-right:7px"></span><strong>Purple</strong> — subtree retained in historical memory</div>
-        <div><span class="tree-legend-dot" style="background:var(--warning);margin-right:7px"></span><strong>Yellow</strong> — subtree currently being replaced</div>
-        <div><span class="tree-legend-dot" style="background:var(--success);margin-right:7px"></span><strong>Cyan</strong> — stored subtree selected for reactivation</div>
+        <div><span class="tree-legend-dot" style="background:var(--warning);margin-right:7px"></span><strong>Yellow</strong> — pruning target or fresh learning leaf L under evaluation</div>
+        <div><span class="tree-legend-dot" style="background:var(--success);margin-right:7px"></span><strong>Cyan</strong> — historical subtree M* successfully reactivated</div>
       </div>
     </div>
   </div>
@@ -2678,7 +2683,7 @@ function startMemoryHTVisualizer() {
     }
 
     if (event.type === 'REACTIVATE') {
-      return `REACTIVATE #${event.storedId}`;
+      return `REACTIVATE M* #${event.storedId}`;
     }
 
     return 'PRUNE';
@@ -3069,8 +3074,9 @@ function startMemoryHTVisualizer() {
     ) {
 
       /*
-       * Highlight the active subtree that is about to be
-       * pruned/replaced.
+       * Yellow marks the active object involved in this event.
+       * For pruning this is C_t; for delayed reactivation this is
+       * the fresh learning leaf L that has already collected evidence.
        */
       if (activeNode) {
         // Ct is the current pruning candidate, so it stays yellow
@@ -3107,7 +3113,8 @@ function startMemoryHTVisualizer() {
       ) {
 
         if (activeNode) {
-          // Yellow = Ct, the active subtree being replaced.
+          // Yellow = fresh learning leaf L being replaced after the
+          // predictive-advantage gate has been satisfied.
           activeNode.classList.add(
             'active-event-node'
           );
@@ -3194,18 +3201,19 @@ function startMemoryHTVisualizer() {
 
 
     /*
-     * REACTIVATE
+     * REACTIVATE — FINAL DELAYED LEAF-BASED METHOD
      *
-     * Methodology:
-     *   1) Ct is the current pruning candidate in the active tree.
-     *   2) An older historical M* is selected from memory.
-     *   3) M* replaces Ct at exactly Ct's structural position.
-     *   4) Independently, Ct is considered for historical-memory admission.
+     * At this point pruning happened earlier. The active object at
+     * event.nodePath is the fresh learning leaf L, not the old C_t.
+     * L has collected local evidence E_L and the historical candidate M*
+     * has passed the predictive-advantage gate.
      *
-     * Therefore, when Ct is actually admitted, show a true two-way swap:
+     * Successful action:
      *
-     *        current Ct  --->  Historical Memory
-     *        stored M*   --->  Ct's active-tree position
+     *        stored M*  --->  exact active-tree position of fresh leaf L
+     *
+     * M* is removed from historical memory after successful reuse.
+     * The fresh leaf L is replaced; it is NOT sent to memory.
      */
     if (event.type === 'REACTIVATE') {
 
@@ -3240,9 +3248,9 @@ function startMemoryHTVisualizer() {
 
 
       /*
-       * Historical M* -> active position of Ct.
+       * Historical M* -> active position of fresh leaf L.
        * event.subtree is the preserved historical structure selected
-       * for successful reactivation.
+       * after evaluation on the same local evidence E_L.
        */
       createAnimatedActionOverlay(
         event.subtree,
@@ -3250,57 +3258,9 @@ function startMemoryHTVisualizer() {
         activeCenter,
         'REACTIVATE',
         activeTarget,
-        `STORED #${event.storedId} → ACTIVE TREE`
+        `M* #${event.storedId} → REPLACE FRESH LEAF L`
       );
 
-
-      /*
-       * Ct -> memory only if the event data confirms that the current
-       * pruning candidate was actually admitted after the operation.
-       *
-       * This matters because methodology says "consider for admission",
-       * not "always store".
-       */
-      const admittedEntry =
-        newlyAdmittedMemoryEntry(
-          event
-        );
-
-      if (
-        admittedEntry
-        && currentCandidate
-      ) {
-
-        const memoryRect =
-          memoryList.getBoundingClientRect();
-
-        const storeDestination = {
-          x:
-            memoryRect.left
-            + memoryRect.width * .50,
-
-          y:
-            memoryRect.top
-            + Math.min(
-              120,
-              memoryRect.height * .22
-            )
-        };
-
-        window.setTimeout(
-          () => {
-            createAnimatedActionOverlay(
-              currentCandidate,
-              activeCenter,
-              storeDestination,
-              'PRUNE_STORE',
-              memoryList,
-              `CURRENT SUBTREE → MEMORY #${admittedEntry.id}`
-            );
-          },
-          90
-        );
-      }
 
       return;
     }
@@ -3867,7 +3827,7 @@ function startMemoryHTVisualizer() {
     ) {
       diagnosticPanel.innerHTML =
         `<div class="diag-title">Snapshot ${frame.instance}</div>` +
-        `<div class="diag-empty">Move to an event frame to inspect pruning or reactivation diagnostics. ` +
+        `<div class="diag-empty">Move to an event frame to inspect pruning, storage, or delayed-reactivation diagnostics. ` +
         `Accuracy is shown in the chart on the left.</div>`;
 
       return;
@@ -3894,49 +3854,86 @@ function startMemoryHTVisualizer() {
     }
 
 
-    const recovered =
-      event.performanceRecovered === true;
+    const historicalAccuracy =
+      event.storedAccuracy != null
+        ? Number(event.storedAccuracy)
+        : event.storedRecentAccuracy != null
+          ? Number(event.storedRecentAccuracy)
+          : NaN;
 
-    const inactive =
-      event.storedWasInactive === true;
+    const leafAccuracy =
+      event.leafAccuracy != null
+        ? Number(event.leafAccuracy)
+        : NaN;
 
+    const advantage =
+      event.advantage != null
+        ? Number(event.advantage)
+        : Number.isFinite(historicalAccuracy) && Number.isFinite(leafAccuracy)
+          ? historicalAccuracy - leafAccuracy
+          : NaN;
+
+    const evidenceSize =
+      event.evidenceSize != null
+        ? Number(event.evidenceSize)
+        : event.reachedInstances != null
+          ? Number(event.reachedInstances)
+          : null;
+
+    const pct = value =>
+      Number.isFinite(value)
+        ? (value * 100).toFixed(1) + '%'
+        : '–';
+
+    const leafAccuracyRow = Number.isFinite(leafAccuracy)
+      ? `<span>Fresh leaf L accuracy on E_L</span><strong>${pct(leafAccuracy)}</strong>`
+      : '';
+
+    const historicalAccuracyRow = Number.isFinite(historicalAccuracy)
+      ? `<span>Historical M* accuracy on E_L</span><strong>${pct(historicalAccuracy)}</strong>`
+      : '';
+
+    const advantageRow = Number.isFinite(advantage)
+      ? `<span>Predictive advantage</span><strong>${(advantage >= 0 ? '+' : '') + advantage.toFixed(4)}</strong>`
+      : '';
 
     diagnosticPanel.innerHTML =
-      `<div class="diag-title">REACTIVATE #${event.storedId}</div>` +
+      `<div class="diag-title">DELAYED REACTIVATION · M* #${event.storedId}</div>` +
       `<div class="diag-grid">` +
 
-      `<span>Stored phase</span>` +
+      `<span>Stored phase (diagnostic)</span>` +
       `<strong>${event.storedPhase ?? '–'}</strong>` +
 
       `<span>Stored at</span>` +
       `<strong>${event.storedAt ?? '–'}</strong>` +
 
-      `<span>Reactivated phase</span>` +
+      `<span>Current phase (diagnostic)</span>` +
       `<strong>${displayPhase(event.phase)}</strong>` +
 
       `<span>Reactivated at</span>` +
       `<strong>${event.instance}</strong>` +
 
-      `<span>Structural similarity</span>` +
-      `<strong>${formatMetric(event.similarity, 4)}</strong>` +
-
-      `<span>Class similarity</span>` +
-      `<strong>${formatMetric(event.classSimilarity, 4)}</strong>` +
-
-      `<span>Recent stored accuracy</span>` +
-      `<strong>${event.storedRecentAccuracy == null ? '–' : (event.storedRecentAccuracy * 100).toFixed(1) + '%'}</strong>` +
-
-      `<span>Best recent accuracy</span>` +
-      `<strong>${event.storedBestRecentAccuracy == null ? '–' : (event.storedBestRecentAccuracy * 100).toFixed(1) + '%'}</strong>` +
-
-      `<span>Was inactive</span>` +
-      `<strong class="${inactive ? 'status-yes' : 'status-no'}">${inactive ? 'YES' : 'NO'}</strong>` +
-
-      `<span>Performance recovered</span>` +
-      `<strong class="${recovered ? 'status-yes' : 'status-no'}">${recovered ? 'YES' : 'NO'}</strong>` +
-
-      `<span>Target path</span>` +
+      `<span>Fresh-leaf target path</span>` +
       `<strong>${event.nodePath ?? '–'}</strong>` +
+
+      `<span>Local-evidence policy</span>` +
+      `<strong>W=1000 · N_min=200 · check=50</strong>` +
+
+      (evidenceSize == null ? '' :
+        `<span>Evidence at decision</span><strong>${evidenceSize} samples</strong>`) +
+
+      leafAccuracyRow +
+      historicalAccuracyRow +
+      advantageRow +
+
+      `<span>Required ε</span>` +
+      `<strong>0.0200</strong>` +
+
+      `<span>Decision</span>` +
+      `<strong class="status-yes">REACTIVATE · predictive gate passed</strong>` +
+
+      `<span>Structural/class similarity</span>` +
+      `<strong>Not used for reactivation</strong>` +
 
       `<span>Visual stage</span>` +
       `<strong>${frame.kind.replace('EVENT_', '')}</strong>` +

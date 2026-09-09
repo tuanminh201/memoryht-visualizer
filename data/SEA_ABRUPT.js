@@ -1,5 +1,5 @@
 window.MEMORY_HT_DATA = {
-  "experiment": "SEA Multi-Concept Recurring — Abrupt",
+  "experiment": "SEA Multi-Concept Recurring - Abrupt (G1)",
   "seed": 3,
   "frames": [
     {
